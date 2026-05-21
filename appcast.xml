@@ -1,22 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
+        <item>
+            <title>MynahPad 1.0.0</title>
+            <sparkle:version>1.0.0</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <pubDate>Thu, 21 May 2026 15:39:59 GMT</pubDate>
+            <description><![CDATA[## [Unreleased]]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.0/MynahPad-1.0.0.dmg" length="4144540" type="application/octet-stream" sparkle:edSignature="8UAzjRXbLXWD3m57j7OyUUUp7VB0U6R/1DwTgZdfkK632LBpuU/xWX4xD/0L468QGAhPYOUc0gkP6CmYJCniAQ==" sparkle:version="1.0.0" sparkle:shortVersionString="1.0.0" />
+        </item>
         <title>MynahPad</title>
         <link>https://raw.githubusercontent.com/90n9/mynah-pad/main/appcast.xml</link>
         <description>Updates to MynahPad — a lightweight macOS menu-bar app for managing and pasting text prompts.</description>
         <language>en</language>
-
-        <!--
-        New releases append <item> entries below this comment. Required attributes
-        on <enclosure> for Sparkle 2:
-          - url:                   direct DMG download URL on a GitHub Release
-          - sparkle:version:       integer build number (CFBundleVersion)
-          - sparkle:shortVersionString: human version (CFBundleShortVersionString)
-          - length:                file size in bytes (from sign_update output)
-          - type:                  "application/octet-stream"
-          - sparkle:edSignature:   EdDSA signature (from sign_update output)
-          - sparkle:minimumSystemVersion: e.g. "13.0"
-        -->
-
     </channel>
 </rss>
