@@ -111,6 +111,7 @@ struct NoteListView: View {
     @ViewBuilder
     private func folderChip(_ folder: Folder) -> some View {
         let isSelected = selectedFolderID == folder.id
+        let isDefault = folder.id == "general"
         Button(action: { selectedFolderID = folder.id }) {
             Text(folder.name)
                 .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
@@ -121,6 +122,19 @@ struct NoteListView: View {
                 .foregroundColor(.white)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if !isDefault {
+                Button("Delete Folder", role: .destructive) {
+                    if selectedFolderID == folder.id {
+                        selectedFolderID = "general"
+                    }
+                    store.deleteFolder(id: folder.id)
+                }
+            } else {
+                Text("Default folder cannot be deleted")
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 
     // MARK: - Note list
