@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write ExportOptions.plist
+        run: |
+          cat > ExportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <!-- NOTE: For a fully unsigned ad-hoc macOS build, change this to
+                   "mac-application". "development" is the iOS term and may error.
+                   See CHANGELOG.md [Unreleased] Known Issues. -->
+              <string>development</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Archive
+        run: |
+          xcodebuild \
+            -scheme PromptQueue \
+            -configuration Release \
+            -archivePath build/PromptQueue.xcarchive \
+            archive \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export archive
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/PromptQueue.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Package DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APP_PATH="$(find build/export -name '*.app' | head -1)"
+          DMG_NAME="PromptQueue-${VERSION}.dmg"
+
+          hdiutil create \
+            -volname "PromptQueue ${VERSION}" \
+            -srcfolder "$APP_PATH" \
+            -ov \
+            -format UDZO \
+            "build/${DMG_NAME}"
+
+          echo "DMG_NAME=${DMG_NAME}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Extract CHANGELOG section
+        id: changelog
+        run: |
+          python3 - <<'PYEOF'
+          import re, os, sys
+
+          changelog = open("CHANGELOG.md").read()
+          # Grab the first ## [x.x.x] or ## [Unreleased] section
+          m = re.search(r'(## \[.*?\].*?)(?=\n## \[|\Z)', changelog, re.DOTALL)
+          body = m.group(1).strip() if m else "Release"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("body<<EOF\n")
+              f.write(body + "\n")
+              f.write("EOF\n")
+          PYEOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "PromptQueue v${{ env.VERSION }}"
+          body: ${{ steps.changelog.outputs.body }}
+          files: build/${{ env.DMG_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

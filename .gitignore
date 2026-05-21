@@ -1,0 +1,32 @@
+# Xcode user data
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/contents.xcworkspacedata
+
+# Build artifacts
+build/
+DerivedData/
+*.xcarchive
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift Package Manager
+.build/
+*.resolved
+
+# CocoaPods (not used, but guard)
+Pods/
+
+# Instruments
+*.trace
+
+# Editor
+.idea/
+*.swp
+*.swo
+
+# Local env
+.env
