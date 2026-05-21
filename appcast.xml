@@ -2,11 +2,20 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.1</title>
+            <sparkle:version>1.0.1</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <pubDate>Thu, 21 May 2026 16:05:56 GMT</pubDate>
+            <description><![CDATA[## [Unreleased]]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.1/MynahPad-1.0.1.dmg" length="4147334" type="application/octet-stream" sparkle:edSignature="V8lQ7WTj3j0FEnuGnDStdFqYy1YWw85edQhykIl/8hnxRYVnXlLp/o2wIOMY/Q2f28eHmxuQkPclqmTIodCFCw==" sparkle:version="1.0.1" sparkle:shortVersionString="1.0.1" />
+        </item>
+        <item>
             <title>MynahPad 1.0.0</title>
             <sparkle:version>1.0.0</sparkle:version>
             <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
             <pubDate>Thu, 21 May 2026 15:39:59 GMT</pubDate>
-            <description><![CDATA[## [Unreleased]]]></description>
+            <description>## [Unreleased]</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.0/MynahPad-1.0.0.dmg" length="4144540" type="application/octet-stream" sparkle:edSignature="8UAzjRXbLXWD3m57j7OyUUUp7VB0U6R/1DwTgZdfkK632LBpuU/xWX4xD/0L468QGAhPYOUc0gkP6CmYJCniAQ==" sparkle:version="1.0.0" sparkle:shortVersionString="1.0.0" />
         </item>
