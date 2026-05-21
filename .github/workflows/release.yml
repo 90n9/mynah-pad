@@ -15,68 +15,99 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Write ExportOptions.plist
+      - name: Parse version and prerelease flag
+        id: version
         run: |
-          cat > ExportOptions.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <!-- NOTE: For a fully unsigned ad-hoc macOS build, change this to
-                   "mac-application". "development" is the iOS term and may error.
-                   See CHANGELOG.md [Unreleased] Known Issues. -->
-              <string>development</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>stripSwiftSymbols</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Archive
-        run: |
-          xcodebuild \
-            -scheme MynahPad \
-            -configuration Release \
-            -archivePath build/MynahPad.xcarchive \
-            archive \
-            -allowProvisioningUpdates \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Export archive
-        run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/MynahPad.xcarchive \
-            -exportPath build/export \
-            -exportOptionsPlist ExportOptions.plist
-
-      - name: Package DMG
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          APP_PATH="$(find build/export -name '*.app' | head -1)"
-          DMG_NAME="MynahPad-${VERSION}.dmg"
-
-          hdiutil create \
-            -volname "MynahPad ${VERSION}" \
-            -srcfolder "$APP_PATH" \
-            -ov \
-            -format UDZO \
-            "build/${DMG_NAME}"
-
-          echo "DMG_NAME=${DMG_NAME}" >> "$GITHUB_ENV"
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          PRERELEASE="false"
+          case "$VERSION" in
+            *-*) PRERELEASE="true" ;;
+          esac
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "PRERELEASE=${PRERELEASE}" >> "$GITHUB_ENV"
+
+      - name: Cache Sparkle
+        uses: actions/cache@v4
+        with:
+          path: vendor/Sparkle
+          key: sparkle-2.6.4
+
+      - name: Build app and DMG
+        run: ./build.sh --release --dmg
+
+      - name: Locate DMG
+        id: dmg
+        run: |
+          DMG_PATH="dist/MynahPad-${VERSION}.dmg"
+          if [[ ! -f "$DMG_PATH" ]]; then
+            echo "DMG not found at $DMG_PATH" >&2
+            ls -la dist/ >&2
+            exit 1
+          fi
+          DMG_NAME="MynahPad-${VERSION}.dmg"
+          DMG_SIZE=$(stat -f %z "$DMG_PATH")
+          DMG_URL="https://github.com/90n9/mynah-pad/releases/download/${TAG}/${DMG_NAME}"
+          echo "dmg_path=${DMG_PATH}" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "dmg_size=${DMG_SIZE}" >> "$GITHUB_OUTPUT"
+          echo "dmg_url=${DMG_URL}" >> "$GITHUB_OUTPUT"
+          echo "DMG_PATH=${DMG_PATH}" >> "$GITHUB_ENV"
+          echo "DMG_NAME=${DMG_NAME}" >> "$GITHUB_ENV"
+          echo "DMG_SIZE=${DMG_SIZE}" >> "$GITHUB_ENV"
+          echo "DMG_URL=${DMG_URL}" >> "$GITHUB_ENV"
+
+      - name: Sign DMG with Sparkle EdDSA key
+        id: sparkle_sign
+        run: |
+          KEY_FILE="$(mktemp -t sparkle-key)"
+          # The secret is the 44-char base64 key string (one line, no PEM wrapper),
+          # exactly as emitted by Sparkle's generate_keys -x.
+          printf '%s' "${SPARKLE_ED_PRIVATE_KEY}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          SIGN_UPDATE="vendor/Sparkle/bin/sign_update"
+          if [[ ! -x "$SIGN_UPDATE" ]]; then
+            echo "sign_update not found at $SIGN_UPDATE" >&2
+            find vendor/Sparkle -name sign_update -print >&2 || true
+            exit 1
+          fi
+
+          SIGN_OUTPUT="$("$SIGN_UPDATE" -f "$KEY_FILE" "$DMG_PATH")"
+          rm -f "$KEY_FILE"
+
+          echo "sign_update output: $SIGN_OUTPUT"
+
+          # sign_update prints a single line like:
+          #   sparkle:edSignature="BASE64SIG" length="123456"
+          ED_SIG=$(printf '%s' "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          LENGTH=$(printf '%s' "$SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+
+          if [[ -z "$ED_SIG" ]] || [[ -z "$LENGTH" ]]; then
+            echo "Failed to parse sign_update output" >&2
+            exit 1
+          fi
+
+          echo "ed_signature=${ED_SIG}" >> "$GITHUB_OUTPUT"
+          echo "length=${LENGTH}" >> "$GITHUB_OUTPUT"
+          echo "ED_SIGNATURE=${ED_SIG}" >> "$GITHUB_ENV"
+          echo "ENCLOSURE_LENGTH=${LENGTH}" >> "$GITHUB_ENV"
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
 
       - name: Extract CHANGELOG section
         id: changelog
         run: |
           python3 - <<'PYEOF'
-          import re, os, sys
+          import re, os
 
           changelog = open("CHANGELOG.md").read()
           # Grab the first ## [x.x.x] or ## [Unreleased] section
@@ -88,11 +119,112 @@ jobs:
               f.write("EOF\n")
           PYEOF
 
+      - name: Update appcast.xml on main
+        if: env.PRERELEASE == 'false'
+        run: |
+          # The release was triggered by a tag, so HEAD is detached at the tag.
+          # Switch to a tracking copy of main so the appcast edit lands on a
+          # branch we can push back.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+
+          python3 - <<'PYEOF'
+          import os
+          import re
+          from email.utils import formatdate
+          from xml.etree import ElementTree as ET
+
+          VERSION = os.environ["VERSION"]
+          DMG_URL = os.environ["DMG_URL"]
+          DMG_SIZE = os.environ["ENCLOSURE_LENGTH"]
+          ED_SIG = os.environ["ED_SIGNATURE"]
+
+          SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+          DC_NS = "http://purl.org/dc/elements/1.1/"
+          ET.register_namespace("sparkle", SPARKLE_NS)
+          ET.register_namespace("dc", DC_NS)
+
+          # Pull description from first changelog section.
+          changelog = open("CHANGELOG.md").read()
+          m = re.search(r'(## \[.*?\].*?)(?=\n## \[|\Z)', changelog, re.DOTALL)
+          description = m.group(1).strip() if m else f"MynahPad {VERSION}"
+
+          tree = ET.parse("appcast.xml")
+          rss = tree.getroot()
+          channel = rss.find("channel")
+          if channel is None:
+              raise SystemExit("appcast.xml missing <channel>")
+
+          item = ET.Element("item")
+
+          title = ET.SubElement(item, "title")
+          title.text = f"MynahPad {VERSION}"
+
+          sparkle_version = ET.SubElement(item, f"{{{SPARKLE_NS}}}version")
+          sparkle_version.text = VERSION
+
+          sparkle_short = ET.SubElement(item, f"{{{SPARKLE_NS}}}shortVersionString")
+          sparkle_short.text = VERSION
+
+          pub_date = ET.SubElement(item, "pubDate")
+          pub_date.text = formatdate(localtime=False, usegmt=True)
+
+          desc = ET.SubElement(item, "description")
+          # CDATA isn't natively supported by ElementTree; mark it for post-processing.
+          desc.text = f"__CDATA_OPEN__{description}__CDATA_CLOSE__"
+
+          min_sys = ET.SubElement(item, f"{{{SPARKLE_NS}}}minimumSystemVersion")
+          min_sys.text = "13.0"
+
+          enclosure = ET.SubElement(item, "enclosure", {
+              "url": DMG_URL,
+              "length": DMG_SIZE,
+              "type": "application/octet-stream",
+              f"{{{SPARKLE_NS}}}edSignature": ED_SIG,
+              f"{{{SPARKLE_NS}}}version": VERSION,
+              f"{{{SPARKLE_NS}}}shortVersionString": VERSION,
+          })
+
+          # Insert as the FIRST child of <channel> (Sparkle iterates top-down,
+          # newest first). Skip past any leading non-Element nodes if present.
+          channel.insert(0, item)
+
+          # Serialize. ElementTree doesn't emit CDATA; swap placeholders back.
+          ET.indent(tree, space="    ")
+          xml_bytes = ET.tostring(rss, encoding="utf-8", xml_declaration=True)
+          xml_text = xml_bytes.decode("utf-8")
+          xml_text = xml_text.replace("__CDATA_OPEN__", "<![CDATA[")
+          xml_text = xml_text.replace("__CDATA_CLOSE__", "]]>")
+
+          with open("appcast.xml", "w", encoding="utf-8") as f:
+              f.write(xml_text)
+              if not xml_text.endswith("\n"):
+                  f.write("\n")
+          PYEOF
+
+      - name: Commit and push appcast.xml
+        if: env.PRERELEASE == 'false'
+        run: |
+          if git diff --quiet -- appcast.xml; then
+            echo "appcast.xml unchanged; skipping commit"
+            exit 0
+          fi
+
+          git add appcast.xml
+          git commit -m "Update appcast.xml for ${TAG}"
+
+          # In case main moved between fetch and now, rebase before pushing.
+          git pull --rebase origin main
+          git push origin main
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "MynahPad v${{ env.VERSION }}"
+          name: "MynahPad ${{ env.TAG }}"
           body: ${{ steps.changelog.outputs.body }}
-          files: build/${{ env.DMG_NAME }}
+          files: ${{ env.DMG_PATH }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

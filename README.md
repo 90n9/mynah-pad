@@ -14,9 +14,11 @@
 
 - **macOS 13 Ventura or later** (uses `.draggable` / `.dropDestination`)
 - **Xcode Command Line Tools** — `xcode-select --install`. Full Xcode is not required;
-  `build.sh` produces a `.app` bundle using `swiftc` from the CLT only.
+  `build.sh` produces a `.app` bundle using `swiftc` and `codesign` from the CLT only.
 
 ## Build
+
+`build.sh` is the only supported build path — there is no `.xcodeproj`.
 
 ```bash
 git clone git@github.com:90n9/mynah-pad.git
@@ -25,6 +27,9 @@ cd mynah-pad
 ./build.sh --release         # Optimised build
 ./build.sh --release --dmg   # Also wrap in a DMG
 ```
+
+The first build downloads the Sparkle framework (~13 MB) to `vendor/Sparkle/`,
+which is gitignored.
 
 On the first run, `build.sh` generates a self-signed code-signing certificate named
 **MynahPad Dev** and installs it in your login keychain (see *Accessibility* below
@@ -81,6 +86,14 @@ the file manually.
 4. Switch to your terminal, then **double-click** a note to paste it.
 5. Used notes turn grey with a ✓ prefix. Right-click for Reset / Delete / Move to folder.
 
+## Updates
+
+MynahPad checks for new versions automatically once a day in the background. You
+can also trigger a check on demand from the menu bar: click the `📝` icon and
+choose **Check for Updates…**. When an update is available, Sparkle shows a
+native dialog with release notes and handles download, verification, install,
+and relaunch.
+
 ## Auto-update (Sparkle)
 
 MynahPad uses **[Sparkle](https://sparkle-project.org/)** for in-app updates.
@@ -98,32 +111,32 @@ host binary.
 
 ### Cutting a release
 
-The signing private key is **not** in the repo. To publish a new release:
+Releases are fully automated by GitHub Actions. Maintainer steps:
 
-1. Bump `CFBundleShortVersionString` in `MynahPad/Info.plist` and update the
-   `## [Unreleased]` heading in `CHANGELOG.md` to the new version.
-2. Tag and push: `git tag v1.2.3 && git push --tags`.
-3. The GitHub Actions release workflow builds an unsigned DMG and attaches it
-   to a GitHub Release.
-4. **Sign the DMG locally** with the Sparkle private key (stored in your
-   macOS Keychain when you ran `generate_keys`):
-   ```bash
-   vendor/Sparkle/bin/sign_update path/to/MynahPad-1.2.3.dmg
-   ```
-   Copy the printed `<enclosure sparkle:edSignature="..." length="..." />`
-   attributes.
-5. Update `appcast.xml` with a new `<item>` entry containing the version,
-   release notes, DMG URL, and the signature attributes from step 4.
-   Commit and push to `main`.
+1. Bump `CFBundleShortVersionString` in `MynahPad/Info.plist`.
+2. Move the `## [Unreleased]` section in `CHANGELOG.md` under a new version heading.
+3. Commit and push to `main`.
+4. Tag and push: `git tag v1.2.3 && git push --tags`.
 
-Sparkle on existing installs will see the new appcast on its next check,
-verify the signature, and offer the update.
+The release workflow then builds the DMG, signs it with the Sparkle EdDSA key,
+commits the updated `appcast.xml` back to `main`, and publishes the GitHub
+Release. Existing installs pick up the new version on their next appcast check.
 
-## Release
+### Sparkle signing key
 
-Tag with `v<MAJOR>.<MINOR>.<PATCH>` to trigger the GitHub Actions release workflow,
-which builds an unsigned DMG and attaches it to a GitHub release. See the
-**Cutting a release** section above for the appcast signing step.
+The Sparkle EdDSA private key is **already provisioned** — do not regenerate it.
+Running `generate_keys` again would mint a new key and invalidate the signature
+on every prior release, so Sparkle on existing installs would reject the update.
+
+The key lives in three places:
+
+- The maintainer's **macOS Keychain** (canonical — created by `generate_keys`).
+- `~/.sparkle/mynah-pad-ed-key.pem` (local backup, kept out of the repo).
+- The `SPARKLE_ED_PRIVATE_KEY` **GitHub Actions secret** (used by the release
+  workflow to sign DMGs in CI).
+
+The matching public key is embedded in the app as `SUPublicEDKey` in
+`MynahPad/Info.plist` and is used by Sparkle to verify downloaded updates.
 
 ## License
 
