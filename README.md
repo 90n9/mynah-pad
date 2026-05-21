@@ -10,13 +10,44 @@
   the Python/PyQt6 predecessor produced a ~200 MB DMG.
 </p>
 
-## Prerequisites
+## Quick Install (no build needed)
+
+Just want to try MynahPad? Grab the prebuilt DMG from the
+[Releases page](https://github.com/90n9/mynah-pad/releases/latest) — no Xcode,
+no clone, no compilation required.
+
+1. Download the latest **`MynahPad-X.Y.Z.dmg`**.
+2. Open the DMG and drag **MynahPad.app** into the **Applications** folder.
+3. **The first launch will be blocked** with *"MynahPad cannot be opened because
+   the developer cannot be verified"* (or *"MynahPad is damaged and can't be
+   opened"*). This is macOS Gatekeeper reacting to the self-signed cert — the
+   DMG is signed with a local `MynahPad Dev` cert, not an Apple Developer ID,
+   so the bundle picks up a quarantine flag on mount. Strip it in Terminal:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/MynahPad.app
+   ```
+
+   Then double-click **MynahPad** in `/Applications`. You only need to do this
+   once per machine — every future update flows through Sparkle's signed
+   channel and won't re-prompt.
+4. macOS will prompt for **Accessibility access** on first run. Grant it at
+   **System Settings → Privacy & Security → Accessibility → enable MynahPad**.
+   Without this permission, the paste feature silently does nothing.
+5. A `📝` icon appears in the menu bar. You're done — see [Usage](#usage) below.
+
+> If you'd rather build from source, read on. Otherwise skip to
+> [Usage](#usage).
+
+## Build from source
+
+### Prerequisites
 
 - **macOS 13 Ventura or later** (uses `.draggable` / `.dropDestination`)
 - **Xcode Command Line Tools** — `xcode-select --install`. Full Xcode is not required;
   `build.sh` produces a `.app` bundle using `swiftc` and `codesign` from the CLT only.
 
-## Build
+### Build
 
 `build.sh` is the only supported build path — there is no `.xcodeproj`.
 
@@ -37,13 +68,11 @@ for why). Subsequent builds reuse the same cert — no prompts.
 
 ## Accessibility Permission
 
-MynahPad needs **Accessibility access** to simulate Cmd+V and paste prompts into your
-terminal. On first run (or when the Accessibility permission is missing) macOS will
-prompt you. You can also grant it manually:
-
-**System Settings → Privacy & Security → Accessibility → enable MynahPad**
-
-Without this permission the paste feature silently does nothing.
+MynahPad needs **Accessibility access** to simulate Cmd+V and paste prompts
+into your terminal. On first run (or when the Accessibility permission is
+missing) macOS will prompt you. You can also grant or revoke it manually at
+**System Settings → Privacy & Security → Accessibility**. Without this
+permission the paste feature silently does nothing.
 
 ### Why the self-signed cert
 
@@ -88,21 +117,26 @@ the file manually.
 
 ## Updates
 
-MynahPad checks for new versions automatically once a day in the background. You
-can also trigger a check on demand from the menu bar: click the `📝` icon and
-choose **Check for Updates…**. When an update is available, Sparkle shows a
-native dialog with release notes and handles download, verification, install,
-and relaunch.
+MynahPad **updates silently in the background** — you don't have to click
+anything. Once a day Sparkle polls the appcast, downloads any newer release,
+verifies its EdDSA signature against the public key baked into the bundle,
+and swaps the bundle the next time you quit the app. On your next launch
+MynahPad is already on the new version. No dialogs, no Install Update button,
+no trip to the GitHub release page.
+
+You can still trigger an on-demand check from the menu bar: click the `📝`
+icon → **Check for Updates…**.
 
 ## Auto-update (Sparkle)
 
 MynahPad uses **[Sparkle](https://sparkle-project.org/)** for in-app updates.
 On launch it polls [`appcast.xml`](appcast.xml) at the repo root; a daily
-background check is scheduled via `SUScheduledCheckInterval`. The menu bar
-also exposes **Check for Updates…** to trigger a check on demand. When a
-newer version is found Sparkle handles download → EdDSA signature
-verification (against `SUPublicEDKey` in `Info.plist`) → install → relaunch
-in a native dialog. No browser detour.
+background check is scheduled via `SUScheduledCheckInterval`. With
+`SUAutomaticallyUpdate` enabled in `Info.plist`, downloads happen silently
+and Sparkle installs them on the app's next quit — no native dialog, no user
+interaction. Every download is EdDSA-verified against `SUPublicEDKey` in
+`Info.plist` before it's installed, so silent updates don't loosen the
+security posture.
 
 The Sparkle framework is downloaded by `build.sh` to `vendor/Sparkle/`
 (gitignored) on first build, embedded in `Contents/Frameworks/`, and re-signed
