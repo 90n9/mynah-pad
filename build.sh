@@ -12,6 +12,24 @@ DIST="$PROJECT_DIR/dist"
 APP="$DIST/MynahPad.app"
 BINARY_NAME="MynahPad"
 
+SPARKLE_VERSION="2.6.4"
+SPARKLE_DIR="$PROJECT_DIR/vendor/Sparkle"
+SPARKLE_FRAMEWORK="$SPARKLE_DIR/Sparkle.framework"
+
+ensure_sparkle() {
+  if [[ -d "$SPARKLE_FRAMEWORK" ]]; then return 0; fi
+  echo "→ Downloading Sparkle $SPARKLE_VERSION..."
+  mkdir -p "$PROJECT_DIR/vendor"
+  local tarball="$PROJECT_DIR/vendor/Sparkle-$SPARKLE_VERSION.tar.xz"
+  curl -L -s -o "$tarball" \
+    "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+  mkdir -p "$SPARKLE_DIR"
+  tar -xJf "$tarball" -C "$SPARKLE_DIR"
+  rm "$tarball"
+}
+
+ensure_sparkle
+
 SDK="$(xcrun --show-sdk-path)"
 SOURCES=(
   "$SRC/Models/Folder.swift"
@@ -19,7 +37,6 @@ SOURCES=(
   "$SRC/Models/Store.swift"
   "$SRC/Services/FocusTracker.swift"
   "$SRC/Services/Paster.swift"
-  "$SRC/Services/UpdateChecker.swift"
   "$SRC/AppDelegate.swift"
   "$SRC/StatusBarController.swift"
   "$SRC/NoteListWindow.swift"
@@ -42,10 +59,13 @@ swiftc \
   -target arm64-apple-macosx13.0 \
   -swift-version 5 \
   $OPT_FLAGS \
+  -F "$SPARKLE_DIR" \
   -framework AppKit \
   -framework SwiftUI \
   -framework CoreGraphics \
   -framework Foundation \
+  -framework Sparkle \
+  -Xlinker -rpath -Xlinker "@executable_path/../Frameworks" \
   "${SOURCES[@]}" \
   -o "$DIST/$BINARY_NAME"
 
@@ -53,9 +73,14 @@ echo "→ Assembling .app bundle..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/Frameworks"
 
 cp "$DIST/$BINARY_NAME" "$APP/Contents/MacOS/$BINARY_NAME"
 rm "$DIST/$BINARY_NAME"
+
+# Embed Sparkle.framework. The framework brings nested XPC services
+# (Downloader.xpc, Installer.xpc, Updater.xpc) — preserve them with -R.
+cp -R "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
 
 # Fix Info.plist: replace the Xcode build variable with the real executable name.
 sed "s/\$(EXECUTABLE_NAME)/$BINARY_NAME/g" \
@@ -156,7 +181,35 @@ EOF
 ensure_signing_identity
 
 echo "→ Codesigning with '$SIGNING_IDENTITY'..."
-codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP" 2>&1 | sed 's/^/  /'
+
+# Sign Sparkle inside-out, then the outer app. Order matters: the outer
+# bundle seals everything beneath it, so children must be signed first.
+#
+# No `--options runtime` here: Hardened Runtime enforces Library Validation,
+# which requires every loaded framework to share a Team ID with the host.
+# Self-signed certs have no Team ID, so loading would fail. For dev builds
+# this is fine — notarization needs runtime, dev builds don't.
+SPARKLE_FW_IN_APP="$APP/Contents/Frameworks/Sparkle.framework"
+SPARKLE_INNER="$SPARKLE_FW_IN_APP/Versions/B"
+
+# Innermost binaries and helpers
+for path in \
+    "$SPARKLE_INNER/Sparkle" \
+    "$SPARKLE_INNER/Autoupdate" \
+    "$SPARKLE_INNER/Updater.app" \
+    "$SPARKLE_INNER/XPCServices/Downloader.xpc" \
+    "$SPARKLE_INNER/XPCServices/Installer.xpc"
+do
+  if [[ -e "$path" ]]; then
+    codesign --force --sign "$SIGNING_IDENTITY" "$path" 2>&1 | sed 's/^/  /'
+  fi
+done
+
+# Framework bundle itself
+codesign --force --sign "$SIGNING_IDENTITY" "$SPARKLE_FW_IN_APP" 2>&1 | sed 's/^/  /'
+
+# Outer app bundle (seals everything above).
+codesign --force --sign "$SIGNING_IDENTITY" "$APP" 2>&1 | sed 's/^/  /'
 
 # Show the designated requirement so you can confirm it's cert-based, not cdhash-based.
 echo "→ Designated requirement:"

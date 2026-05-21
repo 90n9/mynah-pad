@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 
 /// Manages the NSStatusItem in the menu bar and its drop-down menu.
 final class StatusBarController: NSObject {
@@ -6,15 +7,16 @@ final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let store: Store
     private weak var window: NoteListWindow?
-    private var updateMenuItem: NSMenuItem?
+    private let updater: SPUStandardUpdaterController
 
     private static let version: String = {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }()
 
-    init(store: Store, window: NoteListWindow) {
+    init(store: Store, window: NoteListWindow, updater: SPUStandardUpdaterController) {
         self.store = store
         self.window = window
+        self.updater = updater
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
@@ -68,7 +70,7 @@ final class StatusBarController: NSObject {
     private func buildMenu() {
         let menu = NSMenu()
 
-        // Version label / update item placeholder.
+        // Version label (inert).
         let versionItem = NSMenuItem(
             title: "MynahPad v\(Self.version)",
             action: nil,
@@ -76,7 +78,16 @@ final class StatusBarController: NSObject {
         )
         versionItem.isEnabled = false
         menu.addItem(versionItem)
-        updateMenuItem = versionItem   // will be replaced if update available
+
+        // Sparkle on-demand update check. Validates against the latest entry
+        // in the appcast and presents the native update dialog if newer.
+        let checkUpdates = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        checkUpdates.target = self
+        menu.addItem(checkUpdates)
 
         menu.addItem(.separator())
 
@@ -112,25 +123,6 @@ final class StatusBarController: NSObject {
         statusItem.menu = menu
     }
 
-    // MARK: - Update badge
-
-    /// Called from AppDelegate when UpdateChecker finds a newer release.
-    func showUpdateAvailable(version: String) {
-        guard let menu = statusItem.menu,
-              let old = updateMenuItem,
-              let idx = menu.items.firstIndex(of: old) else { return }
-
-        let item = NSMenuItem(
-            title: "⬆ Update available: v\(version)",
-            action: #selector(openReleasePage),
-            keyEquivalent: ""
-        )
-        item.target = self
-        menu.removeItem(at: idx)
-        menu.insertItem(item, at: idx)
-        updateMenuItem = item
-    }
-
     // MARK: - Actions
 
     @objc private func toggleWindow() {
@@ -142,8 +134,7 @@ final class StatusBarController: NSObject {
         NSApp.orderFrontStandardAboutPanel(nil)
     }
 
-    @objc private func openReleasePage() {
-        let url = URL(string: "https://github.com/90n9/mynah-pad/releases")!
-        NSWorkspace.shared.open(url)
+    @objc private func checkForUpdates(_ sender: Any?) {
+        updater.checkForUpdates(sender)
     }
 }

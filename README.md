@@ -81,10 +81,49 @@ the file manually.
 4. Switch to your terminal, then **double-click** a note to paste it.
 5. Used notes turn grey with a ✓ prefix. Right-click for Reset / Delete / Move to folder.
 
+## Auto-update (Sparkle)
+
+MynahPad uses **[Sparkle](https://sparkle-project.org/)** for in-app updates.
+On launch it polls [`appcast.xml`](appcast.xml) at the repo root; a daily
+background check is scheduled via `SUScheduledCheckInterval`. The menu bar
+also exposes **Check for Updates…** to trigger a check on demand. When a
+newer version is found Sparkle handles download → EdDSA signature
+verification (against `SUPublicEDKey` in `Info.plist`) → install → relaunch
+in a native dialog. No browser detour.
+
+The Sparkle framework is downloaded by `build.sh` to `vendor/Sparkle/`
+(gitignored) on first build, embedded in `Contents/Frameworks/`, and re-signed
+with the local `MynahPad Dev` cert so it loads under the same identity as the
+host binary.
+
+### Cutting a release
+
+The signing private key is **not** in the repo. To publish a new release:
+
+1. Bump `CFBundleShortVersionString` in `MynahPad/Info.plist` and update the
+   `## [Unreleased]` heading in `CHANGELOG.md` to the new version.
+2. Tag and push: `git tag v1.2.3 && git push --tags`.
+3. The GitHub Actions release workflow builds an unsigned DMG and attaches it
+   to a GitHub Release.
+4. **Sign the DMG locally** with the Sparkle private key (stored in your
+   macOS Keychain when you ran `generate_keys`):
+   ```bash
+   vendor/Sparkle/bin/sign_update path/to/MynahPad-1.2.3.dmg
+   ```
+   Copy the printed `<enclosure sparkle:edSignature="..." length="..." />`
+   attributes.
+5. Update `appcast.xml` with a new `<item>` entry containing the version,
+   release notes, DMG URL, and the signature attributes from step 4.
+   Commit and push to `main`.
+
+Sparkle on existing installs will see the new appcast on its next check,
+verify the signature, and offer the update.
+
 ## Release
 
 Tag with `v<MAJOR>.<MINOR>.<PATCH>` to trigger the GitHub Actions release workflow,
-which builds an unsigned DMG and attaches it to a GitHub release.
+which builds an unsigned DMG and attaches it to a GitHub release. See the
+**Cutting a release** section above for the appcast signing step.
 
 ## License
 

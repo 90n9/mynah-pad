@@ -30,6 +30,16 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/90n9/mynah-pad/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>cYcjCtkaa77+ITn9yilFD2oMc8oDKXDcmsP0rYpeLzM=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>SUEnableInstallerLauncherService</key>
+    <false/>
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>

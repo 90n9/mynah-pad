@@ -77,3 +77,8 @@ Icon?
 
 # Node (in case scripts pull anything in)
 node_modules/
+
+# Sparkle framework — downloaded by build.sh into vendor/Sparkle on first build.
+# Pinned to SPARKLE_VERSION in build.sh; reproducible without committing 13MB.
+vendor/Sparkle/
+vendor/Sparkle-*.tar.xz

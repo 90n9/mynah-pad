@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Sparkle
 
 /// Coordinates all top-level objects. Holds strong references to everything that
 /// NSApplication would otherwise release (status bar, window, trackers).
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var noteListWindow: NoteListWindow!
     var focusTracker: FocusTracker!
     var store: Store!
+    var updaterController: SPUStandardUpdaterController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide from Dock — belt-and-suspenders alongside LSUIElement.
@@ -24,23 +26,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Floating note list window.
         noteListWindow = NoteListWindow(store: store, focusTracker: focusTracker)
 
-        // Status bar icon + menu.
-        statusBarController = StatusBarController(
-            store: store,
-            window: noteListWindow
+        // Sparkle auto-updater. `startingUpdater: true` schedules the first
+        // background check using SUScheduledCheckInterval from Info.plist.
+        // The user driver presents native dialogs for "new version available",
+        // download progress, and the install-and-relaunch step.
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
         )
 
-        // Start update check in the background.
-        UpdateChecker.shared.check { [weak self] latestVersion in
-            DispatchQueue.main.async {
-                self?.statusBarController.showUpdateAvailable(version: latestVersion)
-            }
-        }
+        // Status bar icon + menu — needs the updater so the "Check for Updates…"
+        // menu item can invoke it.
+        statusBarController = StatusBarController(
+            store: store,
+            window: noteListWindow,
+            updater: updaterController
+        )
 
         // Accessibility trust — required for the Cmd+V paste to actually fire.
         // Without it, CGEventPost silently no-ops. Prompt the user once on launch
         // so they can grant it in System Settings → Privacy & Security.
         promptForAccessibilityIfNeeded()
+    }
+
+    /// First-responder action so any UI hooked to `Selector("checkForUpdates:")`
+    /// (menu items, future buttons) routes through the same updater.
+    @IBAction func checkForUpdates(_ sender: Any?) {
+        updaterController.checkForUpdates(sender)
     }
 
     private func promptForAccessibilityIfNeeded() {

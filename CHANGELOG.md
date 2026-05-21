@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions release workflow building unsigned .app DMG on `v*.*.*` tags
 
 ### Changed
+- Replaced the placeholder `UpdateChecker` (which only opened the GitHub
+  Releases page in a browser) with **Sparkle 2.6.4** for in-app auto-updates.
+  `SPUStandardUpdaterController` is wired in `AppDelegate`. A "Check for
+  Updates…" menu item invokes it; a daily background check runs automatically
+  via `SUScheduledCheckInterval` in Info.plist. When a newer version is found,
+  Sparkle's native dialog handles download, EdDSA signature verification,
+  installation, and relaunch — no browser detour, no manual DMG drag. The
+  appcast URL points to `appcast.xml` at the repo root on `main`; the
+  `SUPublicEDKey` for verifying releases is embedded in the bundle.
+- `build.sh` downloads Sparkle 2.6.4 to `vendor/Sparkle/` on first build
+  (gitignored), embeds `Sparkle.framework` in `Contents/Frameworks/`, and
+  re-signs every nested Mach-O (the framework dylib, `Autoupdate`, `Updater.app`,
+  and both XPC services) with the local self-signed `MynahPad Dev` cert before
+  sealing the outer bundle. Hardened Runtime is deliberately off so Library
+  Validation doesn't reject the framework over Team-ID mismatch (the self-signed
+  cert has no Team ID).
 - Renamed from **PromptQueue** to **MynahPad**. Bundle identifier
   `com.promptqueue.swift` → `com.mynahpad.app`. Signing cert
   `PromptQueue Dev` → `MynahPad Dev`. Accessibility permission must be re-granted
