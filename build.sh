@@ -123,6 +123,49 @@ SIGNING_IDENTITY="MynahPad Dev"
 # password and import the cert there. Locally the function falls back to the
 # user's login keychain so TCC keeps recognising the cert leaf.
 ensure_signing_identity() {
+  # In CI, import a stable cert stored in secrets instead of generating a fresh
+  # one. Each CI-generated cert has a different hash, which changes the app's
+  # designated requirement and causes TCC to drop the Accessibility grant on
+  # every Sparkle auto-update — paste silently fails after the update.
+  # Run scripts/gen-stable-cert.sh once, then add the output to GitHub secrets:
+  #   MACOS_SIGNING_CERT_P12_BASE64   (base64-encoded p12)
+  #   MACOS_SIGNING_CERT_P12_PASSWORD (passphrase used during export)
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]] && [[ -n "${MACOS_SIGNING_CERT_P12_BASE64:-}" ]]; then
+    echo "→ Importing stable signing cert from secret..."
+    local ci_tmpdir ci_kc ci_pw login_kc
+    ci_tmpdir=$(mktemp -d)
+    ci_kc="$HOME/Library/Keychains/mynahpad-build.keychain-db"
+    ci_pw="mynahpad-ci"
+    login_kc=$(security login-keychain | tr -d '" ')
+
+    printf '%s' "${MACOS_SIGNING_CERT_P12_BASE64}" | base64 --decode > "$ci_tmpdir/identity.p12"
+
+    security delete-keychain "$ci_kc" 2>/dev/null || true
+    security create-keychain -p "$ci_pw" "$ci_kc"
+    security list-keychains -d user -s "$ci_kc" "$login_kc"
+    security default-keychain -s "$ci_kc"
+    security set-keychain-settings -lut 21600 "$ci_kc"
+    security unlock-keychain -p "$ci_pw" "$ci_kc"
+
+    security import "$ci_tmpdir/identity.p12" \
+      -k "$ci_kc" \
+      -P "${MACOS_SIGNING_CERT_P12_PASSWORD:-}" \
+      -T /usr/bin/codesign \
+      -T /usr/bin/security \
+      >/dev/null
+
+    security set-key-partition-list \
+      -S apple-tool:,apple:,codesign: \
+      -s -k "$ci_pw" \
+      "$ci_kc" \
+      >/dev/null 2>&1 || true
+
+    rm -f "$ci_tmpdir/identity.p12"
+    rmdir "$ci_tmpdir" 2>/dev/null || true
+    echo "  ✓ Stable cert imported — cert-leaf hash consistent across releases"
+    return 0
+  fi
+
   if security find-identity -p codesigning 2>/dev/null \
        | grep -q "\"$SIGNING_IDENTITY\""; then
     return 0
