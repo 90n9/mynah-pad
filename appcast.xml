@@ -2,11 +2,35 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.12</title>
+            <sparkle:version>1.0.12</sparkle:version>
+            <sparkle:shortVersionString>1.0.12</sparkle:shortVersionString>
+            <pubDate>Fri, 22 May 2026 05:38:04 GMT</pubDate>
+            <description><![CDATA[## [1.0.12] - 2026-05-22
+
+### Changed
+- Minimized strip is now a compact logo-only pill. The app name and the
+  current folder name drop away while collapsed, leaving just the MynahPad
+  glyph alongside the expand and close buttons. The window also shrinks
+  horizontally to fit that content (≈92pt wide × 32pt tall) instead of
+  keeping the expanded width, so it covers a lot less of the screen during
+  screen sharing.
+- Smoother minimize/expand transition. Window resize is driven by a fixed
+  0.22s ease-in-ease-out animation (instead of NSWindow's distance-scaled
+  default that felt sluggish on big jumps), and the title-bar contents
+  fade/slide in sync via a matching SwiftUI animation. The minimize icon
+  toggles between `−` and `+` for a clearer affordance, and the strip
+  anchors to the top-right so the close button stays under the cursor
+  across the transition.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.12/MynahPad-1.0.12.dmg" length="4182874" type="application/octet-stream" sparkle:edSignature="HZ4iV1sIQKyuV8/KFIEJnVtOo+ne/iZ04YTtL+vdI46lUv3jQJObzU0xYX1SpYWw1NfwF/JqEVmFiCUplTPDBw==" sparkle:version="1.0.12" sparkle:shortVersionString="1.0.12" />
+        </item>
+        <item>
             <title>MynahPad 1.0.11</title>
             <sparkle:version>1.0.11</sparkle:version>
             <sparkle:shortVersionString>1.0.11</sparkle:shortVersionString>
             <pubDate>Fri, 22 May 2026 03:58:09 GMT</pubDate>
-            <description><![CDATA[## [1.0.11] - 2026-05-22
+            <description>## [1.0.11] - 2026-05-22
 
 ### Added
 - Title-bar minimize button. Click the `−` between the folder name and the
@@ -16,7 +40,7 @@
   sharing or when you want to read what's behind the panel without losing
   its position. The expand glyph swaps in while collapsed; clicking it
   restores the previous height. The minimized height isn't persisted, so
-  next launch opens at the full size as before.]]></description>
+  next launch opens at the full size as before.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.11/MynahPad-1.0.11.dmg" length="4174763" type="application/octet-stream" sparkle:edSignature="ix9CkGubCE+ukf9GtB0Q9gz+cvo8Ix9Vu1SCRgIkB4reiF7wJVSFak5QHhLzs0gOG/hAK2zcuaI7SImucGYIBA==" sparkle:version="1.0.11" sparkle:shortVersionString="1.0.11" />
         </item>
