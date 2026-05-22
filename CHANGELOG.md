@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-05-22
+
+### Fixed
+- Folder drag-to-reorder now works correctly. Folder rows were wrapped in
+  `Button(action:)` whose gesture recognizer consumed touches before SwiftUI's
+  drag recognizer could start, making folders un-draggable while note rows
+  (which used `.onTapGesture`) dragged fine. Converted both sidebar and stacked
+  folder row builders to use `.onTapGesture` instead of `Button`, matching the
+  note row pattern.
+
 ## [1.0.6] - 2026-05-22
 
 ### Added

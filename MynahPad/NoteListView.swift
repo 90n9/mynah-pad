@@ -161,38 +161,36 @@ struct NoteListView: View {
         let isDropTarget = dropTargetFolderID == folder.id
         let count = store.notes.filter { $0.folder_id == folder.id }.count
 
-        Button(action: {
+        HStack(spacing: 6) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 11))
+                .foregroundColor(isSelected ? .accentColor : .secondary)
+            Text(folder.name)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+            Spacer()
+            if count > 0 {
+                Text("\(count)")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(folderRowBackground(isSelected: isSelected, isDropTarget: isDropTarget))
+                    .padding(.horizontal, 4)
+                NoWindowDragRegion()
+            }
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
             setFolder(folder.id)
             inputFocused = false
-        }) {
-            HStack(spacing: 6) {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
-                Text(folder.name)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                Spacer()
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(folderRowBackground(isSelected: isSelected, isDropTarget: isDropTarget))
-                        .padding(.horizontal, 4)
-                    NoWindowDragRegion()
-                }
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .overlay(alignment: .top) {
             if folderReorderTargetID == folder.id {
                 Rectangle()
@@ -277,7 +275,38 @@ struct NoteListView: View {
         let folderNotes = store.notes.filter { $0.folder_id == folder.id }
 
         VStack(spacing: 1) {
-            Button(action: {
+            HStack(spacing: 8) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 12)
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(isActive ? .accentColor : .secondary)
+                Text(folder.name)
+                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(folderNotes.count)")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(.thinMaterial))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(folderRowBackground(isSelected: isActive, isDropTarget: isDropTarget))
+                        .padding(.horizontal, 4)
+                    NoWindowDragRegion()
+                }
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if isExpanded {
                         expandedFolderIDs.remove(folder.id)
@@ -287,40 +316,7 @@ struct NoteListView: View {
                 }
                 setFolder(folder.id)
                 inputFocused = false
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 12)
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(isActive ? .accentColor : .secondary)
-                    Text(folder.name)
-                        .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    Spacer()
-                    Text("\(folderNotes.count)")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(.thinMaterial))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(folderRowBackground(isSelected: isActive, isDropTarget: isDropTarget))
-                            .padding(.horizontal, 4)
-                        NoWindowDragRegion()
-                    }
-                )
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .overlay(alignment: .top) {
                 if folderReorderTargetID == folder.id {
                     Rectangle()
