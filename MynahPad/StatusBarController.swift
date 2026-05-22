@@ -110,6 +110,14 @@ final class StatusBarController: NSObject {
         about.target = self
         menu.addItem(about)
 
+        let github = NSMenuItem(
+            title: "View on GitHub",
+            action: #selector(openGitHub),
+            keyEquivalent: ""
+        )
+        github.target = self
+        menu.addItem(github)
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
@@ -151,5 +159,9 @@ final class StatusBarController: NSObject {
 
     @objc private func checkForUpdates(_ sender: Any?) {
         updater.checkForUpdates(sender)
+    }
+
+    @objc private func openGitHub() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/90n9/mynah-pad")!)
     }
 }

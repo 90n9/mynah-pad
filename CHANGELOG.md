@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-05-22
+
+### Added
+- "View on GitHub" menu item in the status bar menu opens the project repository
+  in the default browser.
+
 ## [1.0.5] - 2026-05-22
 
 ### Fixed
