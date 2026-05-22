@@ -98,6 +98,14 @@ final class Store: ObservableObject {
         return folder
     }
 
+    func renameFolder(id: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let idx = folders.firstIndex(where: { $0.id == id }) else { return }
+        folders[idx].name = trimmed
+        save()
+    }
+
     func deleteFolder(id: String) {
         // Reassign notes to general before removal.
         for i in notes.indices where notes[i].folder_id == id {
@@ -115,6 +123,14 @@ final class Store: ObservableObject {
 
     func deleteNote(id: String) {
         notes.removeAll { $0.id == id }
+        save()
+    }
+
+    func updateNoteText(id: String, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[idx].text = trimmed
         save()
     }
 

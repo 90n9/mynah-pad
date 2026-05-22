@@ -56,6 +56,19 @@ struct NoteListView: View {
     @FocusState private var inputFocused: Bool
     @FocusState private var newFolderFocused: Bool
 
+    /// Inline folder rename. When non-nil, the matching folder row shows a
+    /// TextField bound to folderRenameDraft instead of its name label.
+    @State private var editingFolderID: String? = nil
+    @State private var folderRenameDraft: String = ""
+    @FocusState private var folderRenameFocused: Bool
+
+    /// Modal note editor. Opens via the row context menu and edits the full
+    /// (potentially multi-line) text via a TextEditor in a sheet.
+    @State private var editingNoteID: String? = nil
+    @State private var noteEditDraft: String = ""
+    @State private var showEditNoteSheet: Bool = false
+    @FocusState private var noteEditFocused: Bool
+
     /// Window width at/above this triggers sidebar layout.
     private static let sidebarBreakpoint: CGFloat = 480
     private static let sidebarWidth: CGFloat = 160
@@ -99,6 +112,7 @@ struct NoteListView: View {
         }
         .foregroundColor(.primary)
         .sheet(isPresented: $showMoveSheet) { moveSheet }
+        .sheet(isPresented: $showEditNoteSheet) { editNoteSheet }
         .onAppear {
             expandedFolderIDs.insert(selectedFolderID)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -242,10 +256,14 @@ struct NoteListView: View {
             Image(systemName: "folder.fill")
                 .font(.system(size: 11))
                 .foregroundColor(isSelected ? .accentColor : .secondary)
-            Text(folder.name)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                .foregroundColor(.primary)
-                .lineLimit(1)
+            if editingFolderID == folder.id {
+                folderRenameField(for: folder, fontSize: 12)
+            } else {
+                Text(folder.name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+            }
             Spacer()
             if count > 0 {
                 Text("\(count)")
@@ -360,10 +378,14 @@ struct NoteListView: View {
                 Image(systemName: "folder.fill")
                     .font(.system(size: 12))
                     .foregroundColor(isActive ? .accentColor : .secondary)
-                Text(folder.name)
-                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                if editingFolderID == folder.id {
+                    folderRenameField(for: folder, fontSize: 13)
+                } else {
+                    Text(folder.name)
+                        .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 Text("\(folderNotes.count)")
                     .font(.system(size: 11))
@@ -459,6 +481,7 @@ struct NoteListView: View {
 
     @ViewBuilder
     private func folderContextMenu(_ folder: Folder, isDefault: Bool) -> some View {
+        Button("Rename") { startFolderRename(folder) }
         if !isDefault {
             Button("Delete Folder", role: .destructive) {
                 if selectedFolderID == folder.id { setFolder("general") }
@@ -541,6 +564,7 @@ struct NoteListView: View {
             dropTargetNoteID = active ? note.id : nil
         }
         .contextMenu {
+            Button("Edit…") { startNoteEdit(note) }
             Button("Reset") { store.resetNote(id: note.id) }
             Button("Delete", role: .destructive) { store.deleteNote(id: note.id) }
             Divider()
@@ -661,6 +685,57 @@ struct NoteListView: View {
         .background(Color.black.opacity(0.15))
     }
 
+    // MARK: - Inline folder rename
+
+    private func folderRenameField(for folder: Folder, fontSize: CGFloat) -> some View {
+        TextField("Folder name", text: $folderRenameDraft)
+            .textFieldStyle(.plain)
+            .font(.system(size: fontSize, weight: .semibold))
+            .foregroundColor(.primary)
+            .focused($folderRenameFocused)
+            .onSubmit { commitFolderRename(folder.id) }
+            .onExitCommand { cancelFolderRename() }
+    }
+
+    // MARK: - Edit note sheet
+
+    private var editNoteSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit note").font(.headline)
+            TextEditor(text: $noteEditDraft)
+                .font(.system(size: 13))
+                .focused($noteEditFocused)
+                .frame(minWidth: 360, minHeight: 160)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.12))
+                )
+            HStack {
+                Spacer()
+                Button("Cancel") { cancelNoteEdit() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { commitNoteEdit() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(noteEditDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 420)
+        .onAppear {
+            // Rehydrate the draft from the store on every open. The
+            // @State pre-fill from startNoteEdit can lose a race with the
+            // sheet presenter, leaving the TextEditor visibly empty.
+            if let id = editingNoteID,
+               let note = store.notes.first(where: { $0.id == id }) {
+                noteEditDraft = note.text
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                noteEditFocused = true
+            }
+        }
+    }
+
     // MARK: - Move sheet (kept as a fallback path)
 
     private var moveSheet: some View {
@@ -729,6 +804,50 @@ struct NoteListView: View {
     private func pasteNote(_ note: Note) {
         store.markUsed(id: note.id)
         Paster.paste(text: note.text, focusTracker: focusTracker)
+    }
+
+    // MARK: - Rename / edit actions
+
+    private func startFolderRename(_ folder: Folder) {
+        editingFolderID = folder.id
+        folderRenameDraft = folder.name
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            folderRenameFocused = true
+        }
+    }
+
+    private func commitFolderRename(_ id: String) {
+        store.renameFolder(id: id, name: folderRenameDraft)
+        editingFolderID = nil
+        folderRenameDraft = ""
+        folderRenameFocused = false
+    }
+
+    private func cancelFolderRename() {
+        editingFolderID = nil
+        folderRenameDraft = ""
+        folderRenameFocused = false
+    }
+
+    private func startNoteEdit(_ note: Note) {
+        editingNoteID = note.id
+        noteEditDraft = note.text
+        showEditNoteSheet = true
+    }
+
+    private func commitNoteEdit() {
+        if let id = editingNoteID {
+            store.updateNoteText(id: id, text: noteEditDraft)
+        }
+        showEditNoteSheet = false
+        editingNoteID = nil
+        noteEditDraft = ""
+    }
+
+    private func cancelNoteEdit() {
+        showEditNoteSheet = false
+        editingNoteID = nil
+        noteEditDraft = ""
     }
 }
 
