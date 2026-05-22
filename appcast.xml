@@ -2,11 +2,31 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.14</title>
+            <sparkle:version>1.0.14</sparkle:version>
+            <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
+            <pubDate>Fri, 22 May 2026 06:38:11 GMT</pubDate>
+            <description><![CDATA[## [1.0.14] - 2026-05-22
+
+### Added
+- Folders can be renamed. Right-click a folder and pick **Rename** — the
+  label swaps to an inline text field; Return saves, Esc cancels. Works
+  for every folder including the default "General" (the underlying id
+  stays the same, only the display name changes).
+- Notes can be edited. Right-click a note and pick **Edit…** to open a
+  modal with a multi-line text editor pre-filled with the current text;
+  Save commits, Cancel discards. ⌘-Return is bound to Save, Esc to
+  Cancel. Double-click on a note still pastes — the edit flow lives on
+  the context menu so the existing gesture is preserved.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.14/MynahPad-1.0.14.dmg" length="5902161" type="application/octet-stream" sparkle:edSignature="XYI49+Wy9vejVrwGLQd1NcteAdgqUOoilbID8zy20QepRjl/eg7MUzSByHBMLTXPd/+n9VFQ9AlOsaGqGeybCQ==" sparkle:version="1.0.14" sparkle:shortVersionString="1.0.14" />
+        </item>
+        <item>
             <title>MynahPad 1.0.13</title>
             <sparkle:version>1.0.13</sparkle:version>
             <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
             <pubDate>Fri, 22 May 2026 06:22:00 GMT</pubDate>
-            <description><![CDATA[## [1.0.13] - 2026-05-22
+            <description>## [1.0.13] - 2026-05-22
 
 ### Changed
 - Minimized strip now shows the full-colour MynahPad icon at 3× the
@@ -20,7 +40,7 @@
   the previous secondary-grey treatment.
 - The About panel now uses the same tight-cropped colourful icon as the
   minimized strip, instead of the padded Dock-canvas version from
-  `Icon.icns`.]]></description>
+  `Icon.icns`.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.13/MynahPad-1.0.13.dmg" length="5880496" type="application/octet-stream" sparkle:edSignature="h5FrGcPmqBdumD+DfsvpdA2/IGroi/A4cMkaeD9+qspU6yPOTiUijYrAzv919e+UxNGLqxHFiPDVX1jye1VXCw==" sparkle:version="1.0.13" sparkle:shortVersionString="1.0.13" />
         </item>
