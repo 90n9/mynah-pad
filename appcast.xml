@@ -2,11 +2,31 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.15</title>
+            <sparkle:version>1.0.15</sparkle:version>
+            <sparkle:shortVersionString>1.0.15</sparkle:shortVersionString>
+            <pubDate>Fri, 22 May 2026 06:49:33 GMT</pubDate>
+            <description><![CDATA[## [1.0.15] - 2026-05-22
+
+### Fixed
+- Edit-note sheet was showing an empty text editor the first time it was
+  opened in a session (subsequent opens worked). The sheet now lives in
+  its own view struct whose draft state is seeded from the constructor,
+  so TextEditor reads the note's current text on its very first render.
+- Single-clicking a note had a perceptible delay before the row turned
+  selected, because the double-click-to-paste handler forced SwiftUI to
+  wait through its tap-disambiguation window. Selection now fires
+  immediately on tap; double-click-to-paste runs as a simultaneous
+  gesture in parallel.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.15/MynahPad-1.0.15.dmg" length="5910242" type="application/octet-stream" sparkle:edSignature="gNDZSREm+iJ/QyY7KHmyoC5AOh0hdfmyeFEgh7XAp/iFbVEE4wyQpZpDL4WxdQCnRTdo3XvpxLhY4eQ/9YG8BA==" sparkle:version="1.0.15" sparkle:shortVersionString="1.0.15" />
+        </item>
+        <item>
             <title>MynahPad 1.0.14</title>
             <sparkle:version>1.0.14</sparkle:version>
             <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
             <pubDate>Fri, 22 May 2026 06:38:11 GMT</pubDate>
-            <description><![CDATA[## [1.0.14] - 2026-05-22
+            <description>## [1.0.14] - 2026-05-22
 
 ### Added
 - Folders can be renamed. Right-click a folder and pick **Rename** — the
@@ -17,7 +37,7 @@
   modal with a multi-line text editor pre-filled with the current text;
   Save commits, Cancel discards. ⌘-Return is bound to Save, Esc to
   Cancel. Double-click on a note still pastes — the edit flow lives on
-  the context menu so the existing gesture is preserved.]]></description>
+  the context menu so the existing gesture is preserved.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.14/MynahPad-1.0.14.dmg" length="5902161" type="application/octet-stream" sparkle:edSignature="XYI49+Wy9vejVrwGLQd1NcteAdgqUOoilbID8zy20QepRjl/eg7MUzSByHBMLTXPd/+n9VFQ9AlOsaGqGeybCQ==" sparkle:version="1.0.14" sparkle:shortVersionString="1.0.14" />
         </item>
