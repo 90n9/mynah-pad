@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-05-22
+
+### Fixed
+- Auto-updates now actually install on relaunch. `SUEnableInstallerLauncherService`
+  was set to `false`, which disabled the Sparkle service responsible for swapping
+  the bundle when the app quits. With it re-enabled Sparkle can replace the running
+  version and relaunch into the new one automatically.
+
+### Added
+- "Restart Now" alert appears when Sparkle finishes downloading an update in the
+  background, so you can apply it immediately instead of waiting for next launch.
+
 ## [1.0.4] - 2026-05-22
 
 ### Fixed

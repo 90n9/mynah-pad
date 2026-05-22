@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // download progress, and the install-and-relaunch step.
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: nil
         )
 
@@ -69,9 +69,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.save()
     }
 
-    /// Window close button hides rather than destroys the window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         noteListWindow.showWindow()
         return false
+    }
+}
+
+// MARK: - SPUUpdaterDelegate
+
+extension AppDelegate: SPUUpdaterDelegate {
+    /// Called on a background thread when Sparkle finishes downloading an update.
+    /// Prompts the user to restart immediately rather than waiting for next launch.
+    func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
+        DispatchQueue.main.async {
+            self.promptRestart(version: item.displayVersionString)
+        }
+    }
+
+    private func promptRestart(version: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "MynahPad \(version) is ready to install"
+        alert.informativeText = "The update has been downloaded. Restart now to apply it."
+        alert.addButton(withTitle: "Restart Now")
+        alert.addButton(withTitle: "Later")
+        if alert.runModal() == .alertFirstButtonReturn {
+            relaunch()
+        }
+    }
+
+    /// Spawns an independent shell process that reopens the app after we quit,
+    /// giving Sparkle's installer time to swap in the new bundle.
+    private func relaunch() {
+        let path = Bundle.main.bundlePath
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "'\\''")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "sleep 1 && open '\(path)'"]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 }
