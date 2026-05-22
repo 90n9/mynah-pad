@@ -117,18 +117,22 @@ struct NoteListView: View {
                     .frame(width: 14, height: 14)
                     .foregroundColor(.primary)
             }
-            Text("MynahPad")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.primary)
-            Spacer()
-            Text(currentFolderName)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            if !viewState.isMinimized {
+                Text("MynahPad")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                Spacer()
+                Text(currentFolderName)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .transition(.opacity)
+            } else {
+                Spacer(minLength: 0)
+            }
             Button(action: onToggleMinimize) {
-                Image(systemName: viewState.isMinimized
-                      ? "arrow.up.left.and.arrow.down.right.circle.fill"
-                      : "minus.circle.fill")
+                Image(systemName: viewState.isMinimized ? "plus.circle.fill" : "minus.circle.fill")
                     .foregroundColor(.secondary)
                     .font(.system(size: 14))
             }
@@ -142,8 +146,9 @@ struct NoteListView: View {
             .buttonStyle(.plain)
             .help("Close")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, viewState.isMinimized ? 10 : 14)
+        .padding(.vertical, viewState.isMinimized ? 6 : 10)
+        .animation(.easeInOut(duration: 0.22), value: viewState.isMinimized)
     }
 
     // MARK: - Update banner

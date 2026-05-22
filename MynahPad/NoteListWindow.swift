@@ -30,15 +30,20 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
     /// Shared selection state — the SwiftUI view writes here; keyDown reads it.
     private let viewState = NoteListViewState()
 
-    /// Height the window had right before being minimized. Used to restore
-    /// the previous size when the user expands again.
+    /// Size the window had right before being minimized. Used to restore
+    /// the previous frame when the user expands again.
     private var savedExpandedHeight: CGFloat = 500
+    private var savedExpandedWidth: CGFloat = 320
 
-    /// Title-bar-only height when minimized.
-    private let minimizedHeight: CGFloat = 36
+    /// Strip dimensions when minimized — logo + minimize + close, nothing else.
+    private let minimizedHeight: CGFloat = 32
+    private let minimizedWidth: CGFloat = 92
 
-    /// Minimum expanded height. Mirrors the value set in `configureWindow()`.
+    /// Minimum expanded bounds. Mirror the values set in `configureWindow()`.
+    private let expandedMinWidth: CGFloat = 280
     private let expandedMinHeight: CGFloat = 350
+    private let expandedMaxWidth: CGFloat = 1100
+    private let expandedMaxHeight: CGFloat = 1200
 
     init(store: Store, focusTracker: FocusTracker) {
         self.store = store
@@ -226,33 +231,57 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
 
     private func collapseToTitleBar() {
         savedExpandedHeight = frame.height
+        savedExpandedWidth = frame.width
         viewState.isMinimized = true
 
-        // Allow the window to be smaller than the normal minimum.
-        minSize = NSSize(width: minSize.width, height: minimizedHeight)
-        maxSize = NSSize(width: maxSize.width, height: minimizedHeight)
+        // Lock the strip dimensions while minimized — no resize handles.
+        minSize = NSSize(width: minimizedWidth, height: minimizedHeight)
+        maxSize = NSSize(width: minimizedWidth, height: minimizedHeight)
 
+        // Anchor the top-right corner so the strip lands where the
+        // minimize/close cluster already is — no perceived jump.
         var newFrame = frame
-        let delta = frame.height - minimizedHeight
+        let dh = frame.height - minimizedHeight
+        let dw = frame.width - minimizedWidth
         newFrame.size.height = minimizedHeight
-        // Keep the top edge anchored so the window doesn't appear to jump.
-        newFrame.origin.y += delta
-        setFrame(newFrame, display: true, animate: true)
+        newFrame.size.width = minimizedWidth
+        newFrame.origin.y += dh
+        newFrame.origin.x += dw
+        animateFrame(to: newFrame)
     }
 
     private func expandToFullHeight() {
         viewState.isMinimized = false
 
-        let target = max(savedExpandedHeight, expandedMinHeight)
-        // Restore the normal resize bounds.
-        minSize = NSSize(width: minSize.width, height: expandedMinHeight)
-        maxSize = NSSize(width: maxSize.width, height: 1200)
+        let targetH = max(savedExpandedHeight, expandedMinHeight)
+        let targetW = max(savedExpandedWidth, expandedMinWidth)
+
+        // Restore the normal resize bounds before sizing up, otherwise
+        // setFrame clamps to the still-minimized maxSize.
+        minSize = NSSize(width: expandedMinWidth, height: expandedMinHeight)
+        maxSize = NSSize(width: expandedMaxWidth, height: expandedMaxHeight)
 
         var newFrame = frame
-        let delta = target - frame.height
-        newFrame.size.height = target
-        newFrame.origin.y -= delta
-        setFrame(newFrame, display: true, animate: true)
+        let dh = targetH - frame.height
+        let dw = targetW - frame.width
+        newFrame.size.height = targetH
+        newFrame.size.width = targetW
+        newFrame.origin.y -= dh
+        newFrame.origin.x -= dw
+        animateFrame(to: newFrame)
+    }
+
+    /// Smooth, consistently-paced resize. NSWindow's built-in `animate: true`
+    /// uses `animationResizeTime(for:)` which scales with frame delta — that
+    /// reads as sluggish on big jumps. A fixed-duration easeInEaseOut feels
+    /// snappier and matches the SwiftUI title-bar animation duration.
+    private func animateFrame(to target: NSRect) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            ctx.allowsImplicitAnimation = true
+            animator().setFrame(target, display: true)
+        }
     }
 
     // MARK: - NSWindowDelegate

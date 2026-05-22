@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-05-22
+
+### Changed
+- Minimized strip is now a compact logo-only pill. The app name and the
+  current folder name drop away while collapsed, leaving just the MynahPad
+  glyph alongside the expand and close buttons. The window also shrinks
+  horizontally to fit that content (≈92pt wide × 32pt tall) instead of
+  keeping the expanded width, so it covers a lot less of the screen during
+  screen sharing.
+- Smoother minimize/expand transition. Window resize is driven by a fixed
+  0.22s ease-in-ease-out animation (instead of NSWindow's distance-scaled
+  default that felt sluggish on big jumps), and the title-bar contents
+  fade/slide in sync via a matching SwiftUI animation. The minimize icon
+  toggles between `−` and `+` for a clearer affordance, and the strip
+  anchors to the top-right so the close button stays under the cursor
+  across the transition.
+
 ## [1.0.11] - 2026-05-22
 
 ### Added
