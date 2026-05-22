@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-05-22
+
+### Fixed
+- Edit-note sheet was showing an empty text editor the first time it was
+  opened in a session (subsequent opens worked). The sheet now lives in
+  its own view struct whose draft state is seeded from the constructor,
+  so TextEditor reads the note's current text on its very first render.
+- Single-clicking a note had a perceptible delay before the row turned
+  selected, because the double-click-to-paste handler forced SwiftUI to
+  wait through its tap-disambiguation window. Selection now fires
+  immediately on tap; double-click-to-paste runs as a simultaneous
+  gesture in parallel.
+
 ## [1.0.14] - 2026-05-22
 
 ### Added

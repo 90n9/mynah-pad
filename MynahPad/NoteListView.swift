@@ -62,12 +62,10 @@ struct NoteListView: View {
     @State private var folderRenameDraft: String = ""
     @FocusState private var folderRenameFocused: Bool
 
-    /// Modal note editor. Opens via the row context menu and edits the full
-    /// (potentially multi-line) text via a TextEditor in a sheet.
-    @State private var editingNoteID: String? = nil
-    @State private var noteEditDraft: String = ""
-    @State private var showEditNoteSheet: Bool = false
-    @FocusState private var noteEditFocused: Bool
+    /// Modal note editor. Non-nil drives `.sheet(item:)` so each open builds
+    /// a fresh EditNoteSheet seeded with the note's current text — avoids
+    /// the empty-on-first-open race that single shared @State suffered from.
+    @State private var editingNote: Note? = nil
 
     /// Window width at/above this triggers sidebar layout.
     private static let sidebarBreakpoint: CGFloat = 480
@@ -112,7 +110,16 @@ struct NoteListView: View {
         }
         .foregroundColor(.primary)
         .sheet(isPresented: $showMoveSheet) { moveSheet }
-        .sheet(isPresented: $showEditNoteSheet) { editNoteSheet }
+        .sheet(item: $editingNote) { note in
+            EditNoteSheet(
+                initial: note.text,
+                onSave: { newText in
+                    store.updateNoteText(id: note.id, text: newText)
+                    editingNote = nil
+                },
+                onCancel: { editingNote = nil }
+            )
+        }
         .onAppear {
             expandedFolderIDs.insert(selectedFolderID)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -539,11 +546,18 @@ struct NoteListView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { pasteNote(note) }
-        .onTapGesture(count: 1) {
+        // Selecting fires on every click immediately. The double-click /
+        // paste handler is registered as a *simultaneous* gesture so SwiftUI
+        // doesn't impose its single/double-tap disambiguation delay on
+        // selection — a double-click still pastes; the redundant second
+        // selection is a no-op.
+        .onTapGesture {
             viewState.selectedNoteID = note.id
             inputFocused = false
         }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { pasteNote(note) }
+        )
         .draggable(NoteRef(id: note.id)) {
             Text(truncated)
                 .font(.system(size: 12))
@@ -697,45 +711,6 @@ struct NoteListView: View {
             .onExitCommand { cancelFolderRename() }
     }
 
-    // MARK: - Edit note sheet
-
-    private var editNoteSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Edit note").font(.headline)
-            TextEditor(text: $noteEditDraft)
-                .font(.system(size: 13))
-                .focused($noteEditFocused)
-                .frame(minWidth: 360, minHeight: 160)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.12))
-                )
-            HStack {
-                Spacer()
-                Button("Cancel") { cancelNoteEdit() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Save") { commitNoteEdit() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(noteEditDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(minWidth: 420)
-        .onAppear {
-            // Rehydrate the draft from the store on every open. The
-            // @State pre-fill from startNoteEdit can lose a race with the
-            // sheet presenter, leaving the TextEditor visibly empty.
-            if let id = editingNoteID,
-               let note = store.notes.first(where: { $0.id == id }) {
-                noteEditDraft = note.text
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                noteEditFocused = true
-            }
-        }
-    }
-
     // MARK: - Move sheet (kept as a fallback path)
 
     private var moveSheet: some View {
@@ -830,24 +805,63 @@ struct NoteListView: View {
     }
 
     private func startNoteEdit(_ note: Note) {
-        editingNoteID = note.id
-        noteEditDraft = note.text
-        showEditNoteSheet = true
+        editingNote = note
+    }
+}
+
+// MARK: - Edit note sheet
+//
+// Lives outside NoteListView so its @State draft can be seeded from the
+// constructor (`_draft = State(initialValue:)`). With this seeding,
+// TextEditor reads the correct value on its very first render —
+// previously the inline sheet bound a shared @State, and on the first
+// presentation TextEditor latched onto the stale empty value before
+// onAppear could rehydrate it.
+private struct EditNoteSheet: View {
+    let initial: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var draft: String
+    @FocusState private var focused: Bool
+
+    init(initial: String,
+         onSave: @escaping (String) -> Void,
+         onCancel: @escaping () -> Void) {
+        self.initial = initial
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _draft = State(initialValue: initial)
     }
 
-    private func commitNoteEdit() {
-        if let id = editingNoteID {
-            store.updateNoteText(id: id, text: noteEditDraft)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit note").font(.headline)
+            TextEditor(text: $draft)
+                .font(.system(size: 13))
+                .focused($focused)
+                .frame(minWidth: 360, minHeight: 160)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.12))
+                )
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { onSave(draft) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
-        showEditNoteSheet = false
-        editingNoteID = nil
-        noteEditDraft = ""
-    }
-
-    private func cancelNoteEdit() {
-        showEditNoteSheet = false
-        editingNoteID = nil
-        noteEditDraft = ""
+        .padding(20)
+        .frame(minWidth: 420)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focused = true
+            }
+        }
     }
 }
 
