@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-05-22
+
+### Added
+- Folders can be renamed. Right-click a folder and pick **Rename** — the
+  label swaps to an inline text field; Return saves, Esc cancels. Works
+  for every folder including the default "General" (the underlying id
+  stays the same, only the display name changes).
+- Notes can be edited. Right-click a note and pick **Edit…** to open a
+  modal with a multi-line text editor pre-filled with the current text;
+  Save commits, Cancel discards. ⌘-Return is bound to Save, Esc to
+  Cancel. Double-click on a note still pastes — the edit flow lives on
+  the context menu so the existing gesture is preserved.
+
 ## [1.0.13] - 2026-05-22
 
 ### Changed
