@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.16] - 2026-05-26
+## [1.0.17] - 2026-05-28
+
+### Added
+- Selecting a note now expands the row to show its full text wrapped over
+  multiple lines instead of the 60-char single-line preview. Unselected
+  rows stay truncated so the list remains scannable.
+- The "New idea…" input is now multi-line: pasting long or multi-line text
+  preserves the full content (previously the single-line field silently
+  dropped everything after the first newline). The field auto-grows up to
+  four visible lines and wraps as you type. Submit with **⌘⏎** (Return
+  now inserts a newline).
 
 ### Added
 - Double-clicking anywhere in the title bar now toggles minimize/expand,
