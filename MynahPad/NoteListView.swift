@@ -510,15 +510,18 @@ struct NoteListView: View {
         let isDropTarget = dropTargetNoteID == note.id
         let truncated = String(note.text.prefix(60)) + (note.text.count > 60 ? "…" : "")
 
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: isUsed ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 11))
                 .foregroundColor(isUsed ? .green : .secondary)
-            Text(truncated)
+                .padding(.top, 2)
+            Text(isSelected ? note.text : truncated)
                 .font(.system(size: 12))
                 .foregroundColor(isUsed ? .secondary : .primary)
-                .lineLimit(1)
-            Spacer()
+                .lineLimit(isSelected ? nil : 1)
+                .fixedSize(horizontal: false, vertical: isSelected)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
             Button(action: { store.deleteNote(id: note.id) }) {
                 Image(systemName: "trash")
                     .font(.system(size: 11))
@@ -660,10 +663,13 @@ struct NoteListView: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            TextField("New idea…", text: $newNoteText)
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField("New idea…", text: $newNoteText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
+                .lineLimit(1...4)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -677,9 +683,11 @@ struct NoteListView: View {
                 Image(systemName: "return")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.secondary)
+                    .padding(.bottom, 6)
             }
             .buttonStyle(.plain)
-            .disabled(newNoteText.trimmingCharacters(in: .whitespaces).isEmpty)
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(newNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -689,7 +697,7 @@ struct NoteListView: View {
 
     private var shortcutHintBar: some View {
         HStack(spacing: 0) {
-            Text("⏎ save  ·  dbl-click paste  ·  drag → folder  ·  1-9 move  ·  ⌫ delete  ·  ⌘⌫ clear ✓")
+            Text("⌘⏎ save  ·  dbl-click paste  ·  drag → folder  ·  1-9 move  ·  ⌫ delete  ·  ⌘⌫ clear ✓")
                 .font(.system(size: 10))
                 .foregroundColor(Color(NSColor.tertiaryLabelColor))
                 .lineLimit(1)
@@ -762,7 +770,7 @@ struct NoteListView: View {
     // MARK: - Actions
 
     private func addNote() {
-        let trimmed = newNoteText.trimmingCharacters(in: .whitespaces)
+        let trimmed = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         store.addNote(text: trimmed, folderID: selectedFolderID)
         newNoteText = ""
