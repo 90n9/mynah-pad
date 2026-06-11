@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Deleted History: deleted notes kept 30 days, restore/delete/clear from the menu-bar item.
+
 ## [1.0.17] - 2026-05-28
 
 ### Added

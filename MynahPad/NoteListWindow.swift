@@ -14,6 +14,9 @@ final class NoteListViewState: ObservableObject {
     /// When true, the window shrinks to the title-bar only so the panel
     /// can stay floating without blocking content during screen sharing.
     @Published var isMinimized: Bool = false
+    /// Drives the deleted-notes history sheet. Set from the menu-bar item
+    /// (via NoteListWindow.showTrashHistory) so the SwiftUI view presents it.
+    @Published var showTrash: Bool = false
 }
 
 // MARK: - Window
@@ -216,6 +219,14 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
         } else {
             showWindow()
         }
+    }
+
+    /// Opens the window (expanding it if minimized) and presents the
+    /// deleted-notes history sheet. Triggered from the menu-bar item.
+    func showTrashHistory() {
+        if viewState.isMinimized { expandToFullHeight() }
+        showWindow()
+        viewState.showTrash = true
     }
 
     // MARK: - Minimize / Expand

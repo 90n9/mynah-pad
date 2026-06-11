@@ -95,16 +95,20 @@ struct NoteListView: View {
             VStack(spacing: 0) {
                 titleBar
                 if !viewState.isMinimized {
-                    updateBanner
-                    Divider()
-                    if geo.size.width >= Self.sidebarBreakpoint {
-                        sidebarLayout
+                    if viewState.showTrash {
+                        trashPanel
                     } else {
-                        stackedLayout
+                        updateBanner
+                        Divider()
+                        if geo.size.width >= Self.sidebarBreakpoint {
+                            sidebarLayout
+                        } else {
+                            stackedLayout
+                        }
+                        Divider()
+                        inputBar
+                        shortcutHintBar
                     }
-                    Divider()
-                    inputBar
-                    shortcutHintBar
                 }
             }
         }
@@ -739,6 +743,121 @@ struct NoteListView: View {
         }
         .padding(24)
         .frame(minWidth: 240)
+    }
+
+    // MARK: - Trash (deleted-notes history) panel
+
+    /// In-window deleted-history view. Renders over the same dark vibrancy as
+    /// the note list (no sheet material) so it matches the main panel exactly.
+    private var trashPanel: some View {
+        VStack(spacing: 0) {
+            // Sub-header: back to the note list + folder-name-style title + clear.
+            HStack(spacing: 6) {
+                Button(action: { viewState.showTrash = false }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Back")
+                Text("Deleted History")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                Spacer()
+                if !store.trash.isEmpty {
+                    Button("Clear All") { store.clearTrash() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(red: 1.0, green: 0.37, blue: 0.34))
+                        .help("Delete all permanently")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(NoWindowDragRegion())
+
+            Divider()
+
+            if store.trash.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 26))
+                        .foregroundColor(.secondary)
+                    Text("No deleted notes")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text("Deleted notes are kept for 30 days.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 1) {
+                        ForEach(store.trash) { entry in
+                            trashRow(entry)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func trashRow(_ entry: DeletedNote) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.note.text)
+                    .font(.system(size: 12))
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(folderName(entry.note.folder_id)) · deleted \(relativeDeleted(entry.deleted_at))")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 4)
+            Button(action: { store.restoreNote(id: entry.id) }) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 11))
+                    .foregroundColor(.accentColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Restore")
+            Button(action: { store.purgeNote(id: entry.id) }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Delete permanently")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(NoWindowDragRegion())
+    }
+
+    /// Folder display name for a note's folder_id; falls back when the folder
+    /// was deleted (the note would restore into General).
+    private func folderName(_ id: String) -> String {
+        store.folders.first(where: { $0.id == id })?.name ?? "General"
+    }
+
+    /// Short relative description of when a note was deleted ("3h ago").
+    private func relativeDeleted(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .abbreviated
+        return fmt.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - Helpers

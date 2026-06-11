@@ -18,6 +18,9 @@ private struct StorageDocument: Codable {
     var folders: [Folder]
     var notes: [Note]
     var window: WindowGeometry
+    /// Deleted-note history (30-day retention). Optional so older `notes.json`
+    /// files without the key still decode; coalesced to `[]` on load.
+    var trash: [DeletedNote]?
 }
 
 // MARK: - Store
@@ -29,7 +32,11 @@ final class Store: ObservableObject {
 
     @Published var folders: [Folder] = []
     @Published var notes: [Note] = []
+    @Published var trash: [DeletedNote] = []
     var windowGeometry: WindowGeometry = .defaultValue
+
+    /// Deleted notes are retained this long before being permanently dropped.
+    static let trashRetention: TimeInterval = 30 * 24 * 60 * 60  // 30 days
 
     // MARK: File path
 
@@ -71,7 +78,9 @@ final class Store: ObservableObject {
             migrate(&doc)
             folders = doc.folders
             notes = doc.notes
+            trash = doc.trash ?? []
             windowGeometry = doc.window
+            pruneTrash()
         } catch {
             print("[Store] Decode error: \(error) — seeding defaults")
             applyDefaults()
@@ -81,7 +90,7 @@ final class Store: ObservableObject {
     // MARK: Save
 
     func save() {
-        let doc = StorageDocument(folders: folders, notes: notes, window: windowGeometry)
+        let doc = StorageDocument(folders: folders, notes: notes, window: windowGeometry, trash: trash)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(doc) else { return }
@@ -122,6 +131,9 @@ final class Store: ObservableObject {
     }
 
     func deleteNote(id: String) {
+        if let note = notes.first(where: { $0.id == id }) {
+            trash.insert(DeletedNote(note: note), at: 0)  // newest first
+        }
         notes.removeAll { $0.id == id }
         save()
     }
@@ -135,6 +147,8 @@ final class Store: ObservableObject {
     }
 
     func deleteUsedNotes(in folderID: String) {
+        let removed = notes.filter { $0.folder_id == folderID && $0.used }
+        trash.insert(contentsOf: removed.map { DeletedNote(note: $0) }, at: 0)
         notes.removeAll { $0.folder_id == folderID && $0.used }
         save()
     }
@@ -185,6 +199,41 @@ final class Store: ObservableObject {
             notes.append(moved)
         }
         save()
+    }
+
+    // MARK: - Trash (delete history)
+
+    /// Restores a deleted note back into the active list. If its original
+    /// folder no longer exists it lands in "general" (matches `migrate()`).
+    func restoreNote(id: String) {
+        guard let idx = trash.firstIndex(where: { $0.id == id }) else { return }
+        var note = trash[idx].note
+        if !folders.contains(where: { $0.id == note.folder_id }) {
+            note.folder_id = "general"
+        }
+        trash.remove(at: idx)
+        notes.insert(note, at: 0)  // newest first
+        save()
+    }
+
+    /// Permanently removes a single entry from the trash.
+    func purgeNote(id: String) {
+        trash.removeAll { $0.id == id }
+        save()
+    }
+
+    /// Empties the entire trash.
+    func clearTrash() {
+        trash.removeAll()
+        save()
+    }
+
+    /// Drops trash entries older than `trashRetention` (30 days). Called on load.
+    private func pruneTrash() {
+        let cutoff = Date().timeIntervalSince1970 - Self.trashRetention
+        let before = trash.count
+        trash.removeAll { $0.deleted_at < cutoff }
+        if trash.count != before { save() }
     }
 
     // MARK: - Helpers

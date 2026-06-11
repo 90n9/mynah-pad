@@ -100,6 +100,14 @@ final class StatusBarController: NSObject {
         showHide.target = self
         menu.addItem(showHide)
 
+        let deletedNotes = NSMenuItem(
+            title: "Deleted History…",
+            action: #selector(showDeletedNotes),
+            keyEquivalent: ""
+        )
+        deletedNotes.target = self
+        menu.addItem(deletedNotes)
+
         menu.addItem(.separator())
 
         let about = NSMenuItem(
@@ -135,6 +143,10 @@ final class StatusBarController: NSObject {
 
     @objc private func toggleWindow() {
         window?.toggleWindow()
+    }
+
+    @objc private func showDeletedNotes() {
+        window?.showTrashHistory()
     }
 
     @objc private func showAbout() {
