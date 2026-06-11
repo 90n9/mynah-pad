@@ -2,11 +2,22 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.18</title>
+            <sparkle:version>1.0.18</sparkle:version>
+            <sparkle:shortVersionString>1.0.18</sparkle:shortVersionString>
+            <pubDate>Thu, 11 Jun 2026 06:28:32 GMT</pubDate>
+            <description><![CDATA[## [1.0.18] - 2026-06-11
+
+- Deleted History: deleted notes kept 30 days, restore/delete/clear from the menu-bar item.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.18/MynahPad-1.0.18.dmg" length="5965358" type="application/octet-stream" sparkle:edSignature="+ndDIYQg/BgfBeAM8GE9bORALhALe4m/dHs3T/y1rGuAPhQj6ur9/hrREnCAbKMozb1b02PemLXe/vhRv5RDDw==" sparkle:version="1.0.18" sparkle:shortVersionString="1.0.18" />
+        </item>
+        <item>
             <title>MynahPad 1.0.17</title>
             <sparkle:version>1.0.17</sparkle:version>
             <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
             <pubDate>Thu, 28 May 2026 13:39:05 GMT</pubDate>
-            <description><![CDATA[## [1.0.17] - 2026-05-28
+            <description>## [1.0.17] - 2026-05-28
 
 ### Added
 - Selecting a note now expands the row to show its full text wrapped over
@@ -21,7 +32,7 @@
 ### Added
 - Double-clicking anywhere in the title bar now toggles minimize/expand,
   matching the standard macOS convention. Single-clicking the dedicated
-  minimize/close buttons still works as before.]]></description>
+  minimize/close buttons still works as before.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.17/MynahPad-1.0.17.dmg" length="5922705" type="application/octet-stream" sparkle:edSignature="cVL1bf6YVtr9cDjAFrkt/24mLlV9AXDkUHEqohc9ej/c6G8R4Kn1IRIiyae7ieLdDeiP1z2rjBM9Deh4aRf6CA==" sparkle:version="1.0.17" sparkle:shortVersionString="1.0.17" />
         </item>
