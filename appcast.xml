@@ -5,12 +5,25 @@
             <title>MynahPad 1.0.19</title>
             <sparkle:version>1.0.19</sparkle:version>
             <sparkle:shortVersionString>1.0.19</sparkle:shortVersionString>
-            <pubDate>Mon, 15 Jun 2026 07:41:11 GMT</pubDate>
+            <pubDate>Mon, 15 Jun 2026 07:42:18 GMT</pubDate>
             <description><![CDATA[## [1.0.19] - 2026-06-15
 
 - Paste a screen capture (⌘⌃⇧4) into the window to save it as an image note with a thumbnail.
 - Right-click an image note for Quick Look, Open in Preview, or Show in Finder.
 - Image files are deleted from disk when their note is purged from Deleted History.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.19/MynahPad-1.0.19.dmg" length="5993927" type="application/octet-stream" sparkle:edSignature="JlHfvHeJGwUY+qHrOoOVFOzjfoWGVynjIX+wHSiD1Gk7eJRLQ2mhp1qmiwQa/ud82CD3IDZGUyjNpvxe8VrIBQ==" sparkle:version="1.0.19" sparkle:shortVersionString="1.0.19" />
+        </item>
+        <item>
+            <title>MynahPad 1.0.19</title>
+            <sparkle:version>1.0.19</sparkle:version>
+            <sparkle:shortVersionString>1.0.19</sparkle:shortVersionString>
+            <pubDate>Mon, 15 Jun 2026 07:41:11 GMT</pubDate>
+            <description>## [1.0.19] - 2026-06-15
+
+- Paste a screen capture (⌘⌃⇧4) into the window to save it as an image note with a thumbnail.
+- Right-click an image note for Quick Look, Open in Preview, or Show in Finder.
+- Image files are deleted from disk when their note is purged from Deleted History.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.19/MynahPad-1.0.19.dmg" length="5993762" type="application/octet-stream" sparkle:edSignature="IUXh9WGje5NNJBboTP3sSARvVGcjZUfiBAk3USt+bIe1GTKcTwMmLFCYKQHwo54tpCqF+ITzoRGkSijGgTnPDw==" sparkle:version="1.0.19" sparkle:shortVersionString="1.0.19" />
         </item>
