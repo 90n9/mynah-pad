@@ -1,6 +1,32 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import Quartz  // QLPreviewPanel
+
+/// Drives the system Quick Look panel for a single image URL. Held as a
+/// singleton so it stays alive while the panel is open (the panel keeps only a
+/// weak reference to its data source).
+final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource {
+    static let shared = QuickLookCoordinator()
+    private var url: URL?
+
+    func preview(_ url: URL) {
+        self.url = url
+        guard let panel = QLPreviewPanel.shared() else {
+            NSWorkspace.shared.open(url)  // fallback if the panel is unavailable
+            return
+        }
+        panel.dataSource = self
+        panel.reloadData()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { url == nil ? 0 : 1 }
+
+    func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> QLPreviewItem! {
+        url as NSURL?
+    }
+}
 
 // Custom UTIs registered in Info.plist's UTExportedTypeDeclarations.
 // Used to differentiate folder-reorder drags from note drags so the drop
@@ -45,6 +71,8 @@ struct NoteListView: View {
 
     @State private var newNoteText: String = ""
     @State private var newFolderName: String = ""
+    /// Local ⌘V monitor that captures pasted images into image notes.
+    @State private var pasteMonitor: Any? = nil
     @State private var showAddFolder: Bool = false
     @State private var moveTargetNoteID: String? = nil
     @State private var showMoveSheet: Bool = false
@@ -519,12 +547,17 @@ struct NoteListView: View {
                 .font(.system(size: 11))
                 .foregroundColor(isUsed ? .green : .secondary)
                 .padding(.top, 2)
-            Text(isSelected ? note.text : truncated)
-                .font(.system(size: 12))
-                .foregroundColor(isUsed ? .secondary : .primary)
-                .lineLimit(isSelected ? nil : 1)
-                .fixedSize(horizontal: false, vertical: isSelected)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if note.isImage {
+                noteThumbnail(note, isSelected: isSelected)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(isSelected ? note.text : truncated)
+                    .font(.system(size: 12))
+                    .foregroundColor(isUsed ? .secondary : .primary)
+                    .lineLimit(isSelected ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: isSelected)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Spacer(minLength: 0)
             Button(action: { store.deleteNote(id: note.id) }) {
                 Image(systemName: "trash")
@@ -587,6 +620,12 @@ struct NoteListView: View {
             dropTargetNoteID = active ? note.id : nil
         }
         .contextMenu {
+            if note.isImage {
+                Button("Quick Look") { quickLook(note) }
+                Button("Open in Preview") { openInPreview(note) }
+                Button("Show in Finder") { showInFinder(note) }
+                Divider()
+            }
             Button("Edit…") { startNoteEdit(note) }
             Button("Reset") { store.resetNote(id: note.id) }
             Button("Delete", role: .destructive) { store.deleteNote(id: note.id) }
@@ -598,6 +637,33 @@ struct NoteListView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Thumbnail shown in place of text for image notes. Collapsed rows show a
+    /// small preview; the selected row shows it larger.
+    @ViewBuilder
+    private func noteThumbnail(_ note: Note, isSelected: Bool) -> some View {
+        if let url = Store.imageURL(for: note), let img = NSImage(contentsOf: url) {
+            VStack(alignment: .leading, spacing: 4) {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: isSelected ? 260 : 120,
+                           maxHeight: isSelected ? 200 : 44,
+                           alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                if !note.text.isEmpty {
+                    Text(note.text)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(isSelected ? nil : 1)
+                }
+            }
+        } else {
+            Label("Image (missing)", systemImage: "photo")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
         }
     }
 
@@ -695,6 +761,56 @@ struct NoteListView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .onAppear { installPasteMonitor() }
+        .onDisappear { removePasteMonitor() }
+    }
+
+    // MARK: - Image paste
+
+    /// Installs a local ⌘V monitor. When the pasteboard holds an image but no
+    /// text (e.g. a ⌘⌃⇧4 screen capture), it's captured as an image note and
+    /// the keystroke is swallowed. Plain-text paste falls through untouched.
+    private func installPasteMonitor() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let isCmdV = event.modifierFlags.contains(.command)
+                && event.charactersIgnoringModifiers?.lowercased() == "v"
+            guard isCmdV, handlePastedImage() else { return event }
+            return nil  // swallow — image captured
+        }
+    }
+
+    private func removePasteMonitor() {
+        if let m = pasteMonitor { NSEvent.removeMonitor(m) }
+        pasteMonitor = nil
+    }
+
+    /// If the general pasteboard carries an image (and no string), store it as
+    /// an image note in the current folder. Returns true when one was captured.
+    private func handlePastedImage() -> Bool {
+        let pb = NSPasteboard.general
+        // A normal text copy puts a string on the board — leave those to the
+        // text field. A screen capture carries only image data.
+        if pb.string(forType: .string) != nil { return false }
+        guard let png = Self.pngData(from: pb) else { return false }
+        store.addImageNote(pngData: png, folderID: selectedFolderID)
+        return true
+    }
+
+    /// Extracts PNG bytes from a pasteboard, normalising TIFF/other bitmap
+    /// representations to PNG. Returns nil if no image is present.
+    private static func pngData(from pb: NSPasteboard) -> Data? {
+        if let png = pb.data(forType: .png) { return png }
+        if let tiff = pb.data(forType: .tiff),
+           let rep = NSBitmapImageRep(data: tiff) {
+            return rep.representation(using: .png, properties: [:])
+        }
+        if let img = NSImage(pasteboard: pb),
+           let tiff = img.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff) {
+            return rep.representation(using: .png, properties: [:])
+        }
+        return nil
     }
 
     // MARK: - Shortcut hint bar
@@ -907,7 +1023,28 @@ struct NoteListView: View {
 
     private func pasteNote(_ note: Note) {
         store.markUsed(id: note.id)
-        Paster.paste(text: note.text, focusTracker: focusTracker)
+        if let url = Store.imageURL(for: note) {
+            Paster.pasteImage(fileURL: url, focusTracker: focusTracker)
+        } else {
+            Paster.paste(text: note.text, focusTracker: focusTracker)
+        }
+    }
+
+    // MARK: - Image preview actions
+
+    private func quickLook(_ note: Note) {
+        guard let url = Store.imageURL(for: note) else { return }
+        QuickLookCoordinator.shared.preview(url)
+    }
+
+    private func openInPreview(_ note: Note) {
+        guard let url = Store.imageURL(for: note) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func showInFinder(_ note: Note) {
+        guard let url = Store.imageURL(for: note) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     // MARK: - Rename / edit actions

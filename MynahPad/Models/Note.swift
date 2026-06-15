@@ -9,17 +9,27 @@ struct Note: Identifiable, Codable, Equatable {
     var folder_id: String
     var used: Bool
     var created_at: Double  // Unix timestamp (seconds)
+    /// Filename (relative to the store's `images/` dir) of an attached image,
+    /// or nil for a plain text note. Optional so older `notes.json` files
+    /// without the key still decode. A note with `image_path != nil` is an
+    /// image note: its `text` is an optional caption.
+    var image_path: String?
+
+    /// True when this note carries an image rather than (only) text.
+    var isImage: Bool { image_path != nil }
 
     init(id: String = UUID().uuidString,
          text: String,
          folder_id: String = "general",
          used: Bool = false,
-         created_at: Double = Date().timeIntervalSince1970) {
+         created_at: Double = Date().timeIntervalSince1970,
+         image_path: String? = nil) {
         self.id = id
         self.text = text
         self.folder_id = folder_id
         self.used = used
         self.created_at = created_at
+        self.image_path = image_path
     }
 }
 

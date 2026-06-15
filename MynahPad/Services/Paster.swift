@@ -50,6 +50,36 @@ enum Paster {
         }
     }
 
+    /// Pastes an image file into the last-focused app. Writes both the image
+    /// bitmap and the file URL to the pasteboard (apps that accept bitmaps —
+    /// Slack, Notes — take the image; file-oriented targets read the URL),
+    /// then posts ⌘V exactly like `paste(text:)`.
+    static func pasteImage(fileURL: URL, focusTracker: FocusTracker) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        var wrote = false
+        if let img = NSImage(contentsOf: fileURL) {
+            wrote = pb.writeObjects([img])
+        }
+        // Also expose the file URL so file-oriented targets can pick it up.
+        pb.writeObjects([fileURL as NSURL])
+        NSLog("[Paster] copied image %@ to pasteboard (bitmap=%@)",
+              fileURL.lastPathComponent, wrote ? "yes" : "no")
+
+        guard let target = focusTracker.lastFocusedApp else {
+            NSLog("[Paster] no previous app recorded — image is on clipboard only")
+            return
+        }
+        if !AXIsProcessTrusted() {
+            NSLog("[Paster] ⚠️ Accessibility NOT trusted — ⌘V will silently fail. Image remains on clipboard for manual ⌘V.")
+            target.activate(options: .activateIgnoringOtherApps)
+            return
+        }
+        NSApp.deactivate()
+        target.activate(options: .activateIgnoringOtherApps)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { sendCmdV() }
+    }
+
     // MARK: - CGEvent helpers
 
     private static func sendCmdV() {

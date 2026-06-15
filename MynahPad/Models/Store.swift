@@ -40,16 +40,35 @@ final class Store: ObservableObject {
 
     // MARK: File path
 
-    private static var storageURL: URL {
+    /// Base config dir for this build variant (`~/.config/mynahpad[-dev]`).
+    /// Dev builds use a sibling directory so testing doesn't trample the
+    /// user's production notes. Detection is bundle-id based: prod is
+    /// `com.mynahpad.app`; dev is `com.mynahpad.app.dev` (see build.sh).
+    private static var baseDirURL: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        // Dev builds use a sibling directory so testing doesn't trample the
-        // user's production notes. Detection is bundle-id based: prod is
-        // `com.mynahpad.app`; dev is `com.mynahpad.app.dev` (see build.sh).
         let bundleID = Bundle.main.bundleIdentifier ?? "com.mynahpad.app"
         let dirName = bundleID.hasSuffix(".dev") ? "mynahpad-dev" : "mynahpad"
         let base = home.appendingPathComponent(".config/\(dirName)", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let url = base.appendingPathComponent("notes.json")
+        return base
+    }
+
+    /// Directory holding image-note files (`<uuid>.png`), created on demand.
+    static var imagesDirURL: URL {
+        let dir = baseDirURL.appendingPathComponent("images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// On-disk URL for an image note's file, or nil for a text note.
+    static func imageURL(for note: Note) -> URL? {
+        guard let name = note.image_path else { return nil }
+        return imagesDirURL.appendingPathComponent(name)
+    }
+
+    private static var storageURL: URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let url = baseDirURL.appendingPathComponent("notes.json")
 
         // One-shot migration from the pre-rename location.
         if !FileManager.default.fileExists(atPath: url.path) {
@@ -128,6 +147,29 @@ final class Store: ObservableObject {
         let note = Note(text: text, folder_id: folderID)
         notes.insert(note, at: 0)  // newest first
         save()
+    }
+
+    /// Persists `pngData` to `images/<uuid>.png` and inserts an image note
+    /// referencing it. Returns the created note, or nil if the write failed.
+    @discardableResult
+    func addImageNote(pngData: Data, caption: String = "", folderID: String) -> Note? {
+        let filename = "\(UUID().uuidString).png"
+        let url = Self.imagesDirURL.appendingPathComponent(filename)
+        guard (try? pngData.write(to: url, options: .atomic)) != nil else {
+            print("[Store] failed to write image note to \(url.path)")
+            return nil
+        }
+        let note = Note(text: caption, folder_id: folderID, image_path: filename)
+        notes.insert(note, at: 0)  // newest first
+        save()
+        return note
+    }
+
+    /// Removes the backing image file for a note, if any. Called when a note
+    /// leaves the system permanently (trash purge / clear).
+    private func deleteImageFile(for note: Note) {
+        guard let url = Self.imageURL(for: note) else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 
     func deleteNote(id: String) {
@@ -218,12 +260,16 @@ final class Store: ObservableObject {
 
     /// Permanently removes a single entry from the trash.
     func purgeNote(id: String) {
+        if let entry = trash.first(where: { $0.id == id }) {
+            deleteImageFile(for: entry.note)
+        }
         trash.removeAll { $0.id == id }
         save()
     }
 
     /// Empties the entire trash.
     func clearTrash() {
+        trash.forEach { deleteImageFile(for: $0.note) }
         trash.removeAll()
         save()
     }
@@ -231,9 +277,11 @@ final class Store: ObservableObject {
     /// Drops trash entries older than `trashRetention` (30 days). Called on load.
     private func pruneTrash() {
         let cutoff = Date().timeIntervalSince1970 - Self.trashRetention
-        let before = trash.count
+        let expired = trash.filter { $0.deleted_at < cutoff }
+        guard !expired.isEmpty else { return }
+        expired.forEach { deleteImageFile(for: $0.note) }
         trash.removeAll { $0.deleted_at < cutoff }
-        if trash.count != before { save() }
+        save()
     }
 
     // MARK: - Helpers

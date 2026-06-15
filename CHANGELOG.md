@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.19] - 2026-06-15
+
+- Paste a screen capture (⌘⌃⇧4) into the window to save it as an image note with a thumbnail.
+- Right-click an image note for Quick Look, Open in Preview, or Show in Finder.
+- Image files are deleted from disk when their note is purged from Deleted History.
+
 ## [1.0.18] - 2026-06-11
 
 - Deleted History: deleted notes kept 30 days, restore/delete/clear from the menu-bar item.
