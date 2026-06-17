@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.20] - 2026-06-18
+
+- Nest a folder inside another: drag a folder onto another folder's body, or use the right-click menu ("Move into…" / "Top Level").
+- Drag a folder onto another folder's top edge to reorder it as a sibling.
+- Drag a folder or note onto the "Add Folder" strip to move it to the top level / General.
+- Reset every note in a folder to unused with "Reset All Notes" in the folder right-click menu.
+
 ## [1.0.19] - 2026-06-15
 
 - Paste a screen capture (⌘⌃⇧4) into the window to save it as an image note with a thumbnail.

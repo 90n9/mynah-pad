@@ -50,6 +50,69 @@ struct NoteRef: Codable, Transferable {
     }
 }
 
+/// Which action a hovering drag would perform on a folder row.
+enum FolderDropZone { case nest, reorderBefore }
+
+/// Drop delegate for folder rows. Reads `DropInfo.location` to choose between
+/// reordering (drop near the top edge) and nesting (drop on the body), which a
+/// plain `.onDrop` closure can't do since it isn't handed the drop position.
+struct FolderDropDelegate: DropDelegate {
+    /// Height of the top strip (in points) that triggers reorder instead of nest.
+    private static let reorderEdge: CGFloat = 10
+
+    let onFolder: (_ draggedID: String, _ reorder: Bool) -> Void
+    let onNote: (_ noteID: String) -> Void
+    let setZone: (FolderDropZone?) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.mynahFolderRef, .mynahNoteRef])
+    }
+
+    func dropEntered(info: DropInfo) { _ = zone(for: info) }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        _ = zone(for: info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) { setZone(nil) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let reorder = zone(for: info) == .reorderBefore
+        setZone(nil)
+        let folderItems = info.itemProviders(for: [.mynahFolderRef])
+        let noteItems = info.itemProviders(for: [.mynahNoteRef])
+        for p in folderItems {
+            Self.load(FolderRef.self, p, .mynahFolderRef) { onFolder($0.id, reorder) }
+        }
+        for p in noteItems {
+            Self.load(NoteRef.self, p, .mynahNoteRef) { onNote($0.id) }
+        }
+        return !(folderItems.isEmpty && noteItems.isEmpty)
+    }
+
+    /// Reorder only applies to folder drags near the top edge; notes (and
+    /// body-dropped folders) nest/move-in.
+    @discardableResult
+    private func zone(for info: DropInfo) -> FolderDropZone {
+        let isFolder = !info.itemProviders(for: [.mynahFolderRef]).isEmpty
+        let z: FolderDropZone = (isFolder && info.location.y < Self.reorderEdge)
+            ? .reorderBefore : .nest
+        setZone(z)
+        return z
+    }
+
+    private static func load<T: Decodable>(_ t: T.Type,
+                                           _ provider: NSItemProvider,
+                                           _ uti: UTType,
+                                           _ apply: @escaping (T) -> Void) {
+        provider.loadDataRepresentation(forTypeIdentifier: uti.identifier) { data, _ in
+            guard let data, let ref = try? JSONDecoder().decode(T.self, from: data) else { return }
+            DispatchQueue.main.async { apply(ref) }
+        }
+    }
+}
+
 /// Root SwiftUI view shown inside NoteListWindow.
 ///
 /// Adaptive layout:
@@ -77,8 +140,12 @@ struct NoteListView: View {
     @State private var moveTargetNoteID: String? = nil
     @State private var showMoveSheet: Bool = false
     @State private var dropTargetFolderID: String? = nil
+    /// Folder whose top edge currently shows the reorder-insertion line.
     @State private var folderReorderTargetID: String? = nil
     @State private var dropTargetNoteID: String? = nil
+    /// Lights up the "Add Folder" strip while a folder/note is dragged over it
+    /// (drop there to move to top level / General).
+    @State private var rootDropTargeted: Bool = false
     /// Which folders show their notes inline in stacked layout.
     @State private var expandedFolderIDs: Set<String> = []
     @FocusState private var inputFocused: Bool
@@ -277,8 +344,8 @@ struct NoteListView: View {
     private var sidebarFolderList: some View {
         ScrollView {
             VStack(spacing: 1) {
-                ForEach(store.folders) { folder in
-                    sidebarFolderRow(folder)
+                ForEach(flattenedFolders(respectExpansion: false), id: \.folder.id) { entry in
+                    sidebarFolderRow(entry.folder, depth: entry.depth)
                 }
                 addFolderRow.padding(.top, 8)
             }
@@ -287,14 +354,17 @@ struct NoteListView: View {
     }
 
     @ViewBuilder
-    private func sidebarFolderRow(_ folder: Folder) -> some View {
+    private func sidebarFolderRow(_ folder: Folder, depth: Int) -> some View {
         let isSelected = selectedFolderID == folder.id
         let isDefault = folder.id == "general"
         let isDropTarget = dropTargetFolderID == folder.id
         let count = store.notes.filter { $0.folder_id == folder.id }.count
 
         HStack(spacing: 6) {
-            Image(systemName: "folder.fill")
+            if depth > 0 {
+                Spacer().frame(width: CGFloat(depth) * 14)
+            }
+            Image(systemName: depth > 0 ? "folder" : "folder.fill")
                 .font(.system(size: 11))
                 .foregroundColor(isSelected ? .accentColor : .secondary)
             if editingFolderID == folder.id {
@@ -349,24 +419,7 @@ struct NoteListView: View {
                     .fill(Color.accentColor.opacity(0.9))
             )
         }
-        .dropDestination(for: FolderRef.self) { refs, _ in
-            for ref in refs where ref.id != folder.id {
-                store.moveFolder(id: ref.id, before: folder.id)
-            }
-            return true
-        } isTargeted: { active in
-            folderReorderTargetID = active ? folder.id : nil
-        }
-        .dropDestination(for: NoteRef.self) { refs, _ in
-            for ref in refs {
-                store.moveNote(id: ref.id, toFolder: folder.id)
-            }
-            expandedFolderIDs.insert(folder.id)
-            setFolder(folder.id)
-            return true
-        } isTargeted: { active in
-            dropTargetFolderID = active ? folder.id : nil
-        }
+        .onDrop(of: [.mynahFolderRef, .mynahNoteRef], delegate: folderDropDelegate(folder))
         .contextMenu {
             folderContextMenu(folder, isDefault: isDefault)
         }
@@ -393,8 +446,8 @@ struct NoteListView: View {
     private var stackedLayout: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(store.folders) { folder in
-                    stackedFolderSection(folder)
+                ForEach(flattenedFolders(respectExpansion: true), id: \.folder.id) { entry in
+                    stackedFolderSection(entry.folder, depth: entry.depth)
                 }
                 addFolderRow.padding(.top, 6)
             }
@@ -403,7 +456,7 @@ struct NoteListView: View {
     }
 
     @ViewBuilder
-    private func stackedFolderSection(_ folder: Folder) -> some View {
+    private func stackedFolderSection(_ folder: Folder, depth: Int) -> some View {
         let isExpanded = expandedFolderIDs.contains(folder.id)
         let isActive = selectedFolderID == folder.id
         let isDefault = folder.id == "general"
@@ -412,11 +465,14 @@ struct NoteListView: View {
 
         VStack(spacing: 1) {
             HStack(spacing: 8) {
+                if depth > 0 {
+                    Spacer().frame(width: CGFloat(depth) * 16)
+                }
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.secondary)
                     .frame(width: 12)
-                Image(systemName: "folder.fill")
+                Image(systemName: depth > 0 ? "folder" : "folder.fill")
                     .font(.system(size: 12))
                     .foregroundColor(isActive ? .accentColor : .secondary)
                 if editingFolderID == folder.id {
@@ -479,24 +535,7 @@ struct NoteListView: View {
                         .fill(Color.accentColor.opacity(0.9))
                 )
             }
-            .dropDestination(for: FolderRef.self) { refs, _ in
-                for ref in refs where ref.id != folder.id {
-                    store.moveFolder(id: ref.id, before: folder.id)
-                }
-                return true
-            } isTargeted: { active in
-                folderReorderTargetID = active ? folder.id : nil
-            }
-            .dropDestination(for: NoteRef.self) { refs, _ in
-                for ref in refs {
-                    store.moveNote(id: ref.id, toFolder: folder.id)
-                }
-                expandedFolderIDs.insert(folder.id)
-                setFolder(folder.id)
-                return true
-            } isTargeted: { active in
-                dropTargetFolderID = active ? folder.id : nil
-            }
+            .onDrop(of: [.mynahFolderRef, .mynahNoteRef], delegate: folderDropDelegate(folder))
             .contextMenu {
                 folderContextMenu(folder, isDefault: isDefault)
             }
@@ -506,13 +545,13 @@ struct NoteListView: View {
                     Text("Empty — drop notes here or add below")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
-                        .padding(.leading, 36)
+                        .padding(.leading, 36 + CGFloat(depth) * 16)
                         .padding(.vertical, 4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     ForEach(folderNotes) { note in
                         noteRow(note)
-                            .padding(.leading, 20)
+                            .padding(.leading, 20 + CGFloat(depth) * 16)
                             .padding(.trailing, 8)
                     }
                 }
@@ -523,6 +562,26 @@ struct NoteListView: View {
     @ViewBuilder
     private func folderContextMenu(_ folder: Folder, isDefault: Bool) -> some View {
         Button("Rename") { startFolderRename(folder) }
+        Button("Reset All Notes") { store.resetNotes(in: folder.id) }
+        if !isDefault {
+            let targets = validParents(for: folder)
+            if folder.parent_id != nil || !targets.isEmpty {
+                Menu("Move into…") {
+                    if folder.parent_id != nil {
+                        Button("Top Level") {
+                            store.setFolderParent(id: folder.id, parentID: nil)
+                        }
+                        Divider()
+                    }
+                    ForEach(targets) { target in
+                        Button(target.name) {
+                            store.setFolderParent(id: folder.id, parentID: target.id)
+                        }
+                    }
+                }
+            }
+        }
+        Divider()
         if !isDefault {
             Button("Delete Folder", role: .destructive) {
                 if selectedFolderID == folder.id { setFolder("general") }
@@ -680,8 +739,8 @@ struct NoteListView: View {
 
     // MARK: - Add folder row (shared)
 
-    @ViewBuilder
     private var addFolderRow: some View {
+        Group {
         if showAddFolder {
             HStack(spacing: 8) {
                 Image(systemName: "folder.badge.plus")
@@ -727,6 +786,16 @@ struct NoteListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(rootDropTargeted ? Color.accentColor.opacity(0.25) : Color.clear)
+                .padding(.horizontal, 4)
+        )
+        .onDrop(of: [.mynahFolderRef, .mynahNoteRef],
+                isTargeted: $rootDropTargeted) { providers in
+            handleRootDrop(providers)
         }
     }
 
@@ -986,6 +1055,106 @@ struct NoteListView: View {
         if isDropTarget { return Color.accentColor.opacity(0.45) }
         if isSelected { return Color.accentColor.opacity(0.18) }
         return Color.clear
+    }
+
+    /// Pre-order flattening of the folder tree into `(folder, depth)` pairs,
+    /// so the layouts can render nesting as a flat `ForEach` (SwiftUI's
+    /// `some View` return type can't express a self-recursive view function).
+    /// When `respectExpansion` is true a folder's children are emitted only if
+    /// it's expanded — used by the stacked layout's disclosure behaviour; the
+    /// sidebar passes false to always show the whole tree.
+    private func flattenedFolders(respectExpansion: Bool) -> [(folder: Folder, depth: Int)] {
+        var result: [(folder: Folder, depth: Int)] = []
+        func walk(_ parentID: String?, _ depth: Int) {
+            for folder in store.folders where folder.parent_id == parentID {
+                result.append((folder, depth))
+                if !respectExpansion || expandedFolderIDs.contains(folder.id) {
+                    walk(folder.id, depth + 1)
+                }
+            }
+        }
+        walk(nil, 0)
+        return result
+    }
+
+    /// Folders a given folder may be nested under: everything except itself,
+    /// its current parent, and its own descendants (which would form a cycle).
+    private func validParents(for folder: Folder) -> [Folder] {
+        store.folders.filter { candidate in
+            candidate.id != folder.id
+                && candidate.id != folder.parent_id
+                && !store.isDescendant(candidate.id, of: folder.id)
+        }
+    }
+
+    // MARK: - Folder drop handling
+
+    /// Drop delegate for a folder row. Distinguishes by drop position: a folder
+    /// dragged onto the top edge **reorders** before this folder (as a sibling);
+    /// dropped on the body it **nests** under this folder. Notes always move in.
+    /// `DropDelegate` is used (not `.onDrop` closure) because it exposes
+    /// `DropInfo.location`, which the closure form lacks.
+    private func folderDropDelegate(_ folder: Folder) -> FolderDropDelegate {
+        FolderDropDelegate(
+            onFolder: { draggedID, reorder in
+                if reorder {
+                    store.reorderFolder(id: draggedID, before: folder.id)
+                } else if draggedID != folder.id {
+                    store.setFolderParent(id: draggedID, parentID: folder.id)
+                    expandedFolderIDs.insert(folder.id)
+                }
+            },
+            onNote: { noteID in
+                store.moveNote(id: noteID, toFolder: folder.id)
+                expandedFolderIDs.insert(folder.id)
+                setFolder(folder.id)
+            },
+            setZone: { zone in
+                switch zone {
+                case .reorderBefore:
+                    folderReorderTargetID = folder.id
+                    if dropTargetFolderID == folder.id { dropTargetFolderID = nil }
+                case .nest:
+                    dropTargetFolderID = folder.id
+                    if folderReorderTargetID == folder.id { folderReorderTargetID = nil }
+                case .none:
+                    if dropTargetFolderID == folder.id { dropTargetFolderID = nil }
+                    if folderReorderTargetID == folder.id { folderReorderTargetID = nil }
+                }
+            }
+        )
+    }
+
+    /// Un-nests a folder (or moves a note to General) when dropped on the
+    /// root-level "Add Folder" strip — the drag affordance for "move to top".
+    private func handleRootDrop(_ providers: [NSItemProvider]) -> Bool {
+        var handled = false
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.mynahFolderRef.identifier) {
+                handled = true
+                loadRef(FolderRef.self, from: provider, type: .mynahFolderRef) { ref in
+                    store.setFolderParent(id: ref.id, parentID: nil)
+                }
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.mynahNoteRef.identifier) {
+                handled = true
+                loadRef(NoteRef.self, from: provider, type: .mynahNoteRef) { ref in
+                    store.moveNote(id: ref.id, toFolder: "general")
+                }
+            }
+        }
+        return handled
+    }
+
+    /// Decodes a `CodableRepresentation` payload (JSON) off the pasteboard
+    /// provider and runs `apply` on the main actor.
+    private func loadRef<T: Decodable>(_ type: T.Type,
+                                       from provider: NSItemProvider,
+                                       type uti: UTType,
+                                       apply: @escaping (T) -> Void) {
+        provider.loadDataRepresentation(forTypeIdentifier: uti.identifier) { data, _ in
+            guard let data, let ref = try? JSONDecoder().decode(T.self, from: data) else { return }
+            DispatchQueue.main.async { apply(ref) }
+        }
     }
 
 

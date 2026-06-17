@@ -135,12 +135,47 @@ final class Store: ObservableObject {
     }
 
     func deleteFolder(id: String) {
+        // Re-home child folders to the deleted folder's parent (or top level)
+        // so they aren't orphaned.
+        let removedParent = folders.first(where: { $0.id == id })?.parent_id
+        for i in folders.indices where folders[i].parent_id == id {
+            folders[i].parent_id = removedParent
+        }
         // Reassign notes to general before removal.
         for i in notes.indices where notes[i].folder_id == id {
             notes[i].folder_id = "general"
         }
         folders.removeAll { $0.id == id }
         save()
+    }
+
+    /// Re-parents folder `id` under `parentID` (nil = top level). The "general"
+    /// folder always stays at the root. Guards against cycles: a folder cannot
+    /// be nested inside itself or any of its own descendants.
+    func setFolderParent(id: String, parentID: String?) {
+        guard id != "general",
+              let idx = folders.firstIndex(where: { $0.id == id }),
+              folders[idx].parent_id != parentID else { return }
+        if let parentID {
+            guard folders.contains(where: { $0.id == parentID }),
+                  !isDescendant(parentID, of: id) else { return }
+        }
+        folders[idx].parent_id = parentID
+        save()
+    }
+
+    /// True when `candidate` is `ancestor` itself or sits anywhere below it in
+    /// the folder tree. Used to reject re-parent operations that would form a
+    /// cycle. Bounded by `folders.count` against malformed (already-cyclic) data.
+    func isDescendant(_ candidate: String, of ancestor: String) -> Bool {
+        var current: String? = candidate
+        var steps = 0
+        while let c = current, steps <= folders.count {
+            if c == ancestor { return true }
+            current = folders.first(where: { $0.id == c })?.parent_id
+            steps += 1
+        }
+        return false
     }
 
     func addNote(text: String, folderID: String) {
@@ -207,6 +242,17 @@ final class Store: ObservableObject {
         save()
     }
 
+    /// Clears the `used` flag on every note in `folderID`, returning the whole
+    /// folder to an unused state. No-op (no save) when nothing was used.
+    func resetNotes(in folderID: String) {
+        var changed = false
+        for i in notes.indices where notes[i].folder_id == folderID && notes[i].used {
+            notes[i].used = false
+            changed = true
+        }
+        if changed { save() }
+    }
+
     func moveNote(id: String, toFolder folderID: String) {
         guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[idx].folder_id = folderID
@@ -224,6 +270,25 @@ final class Store: ObservableObject {
         } else {
             folders.append(moved)
         }
+        save()
+    }
+
+    /// Drag-reorder: places folder `id` immediately before `targetID` in the
+    /// sibling order, re-parenting it to share `targetID`'s parent so it becomes
+    /// a true sibling. Cycle- and "general"-root-guarded like `setFolderParent`.
+    func reorderFolder(id: String, before targetID: String) {
+        guard id != targetID,
+              let target = folders.first(where: { $0.id == targetID }),
+              let from = folders.firstIndex(where: { $0.id == id }) else { return }
+        let newParent = target.parent_id
+        if let newParent, isDescendant(newParent, of: id) { return }   // would form a cycle
+        if id == "general" && newParent != nil { return }              // general stays root
+        var moved = folders.remove(at: from)
+        moved.parent_id = newParent
+        guard let to = folders.firstIndex(where: { $0.id == targetID }) else {
+            folders.append(moved); save(); return
+        }
+        folders.insert(moved, at: to)
         save()
     }
 
@@ -306,7 +371,17 @@ final class Store: ObservableObject {
             doc.notes[i].folder_id = "general"
         }
 
-        // 3. `used` defaults to false — already set by Codable default init,
+        // 3. Normalise folder nesting: "general" is always a root; any
+        //    parent_id pointing at a missing folder falls back to top level.
+        for i in doc.folders.indices {
+            if doc.folders[i].id == "general" {
+                doc.folders[i].parent_id = nil
+            } else if let p = doc.folders[i].parent_id, !knownIDs.contains(p) {
+                doc.folders[i].parent_id = nil
+            }
+        }
+
+        // 4. `used` defaults to false — already set by Codable default init,
         //    but guard against any future schema that might omit the field.
         // (Nothing extra needed: Swift initialises Bool? as nil; struct defaults handle it.)
     }
