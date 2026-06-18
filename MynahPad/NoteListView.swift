@@ -162,6 +162,10 @@ struct NoteListView: View {
     /// the empty-on-first-open race that single shared @State suffered from.
     @State private var editingNote: Note? = nil
 
+    /// Folder awaiting a delete-confirmation choice (delete its notes vs move
+    /// them to General). Only set when the folder actually contains notes.
+    @State private var pendingDeleteFolder: Folder? = nil
+
     /// Window width at/above this triggers sidebar layout.
     private static let sidebarBreakpoint: CGFloat = 480
     private static let sidebarWidth: CGFloat = 160
@@ -218,6 +222,30 @@ struct NoteListView: View {
                 },
                 onCancel: { editingNote = nil }
             )
+        }
+        .confirmationDialog(
+            "Delete this folder?",
+            isPresented: Binding(
+                get: { pendingDeleteFolder != nil },
+                set: { if !$0 { pendingDeleteFolder = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDeleteFolder
+        ) { folder in
+            let count = store.notes.filter { $0.folder_id == folder.id }.count
+            Button("Delete Folder and \(count) Note\(count == 1 ? "" : "s")", role: .destructive) {
+                if selectedFolderID == folder.id { setFolder("general") }
+                store.deleteFolder(id: folder.id, deleteNotes: true)
+                pendingDeleteFolder = nil
+            }
+            Button("Move Notes to General") {
+                if selectedFolderID == folder.id { setFolder("general") }
+                store.deleteFolder(id: folder.id, deleteNotes: false)
+                pendingDeleteFolder = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteFolder = nil }
+        } message: { folder in
+            Text("“\(folder.name)” has notes. Delete them along with the folder, or move them to General?")
         }
         .onAppear {
             expandedFolderIDs.insert(selectedFolderID)
@@ -585,8 +613,13 @@ struct NoteListView: View {
         Divider()
         if !isDefault {
             Button("Delete Folder", role: .destructive) {
-                if selectedFolderID == folder.id { setFolder("general") }
-                store.deleteFolder(id: folder.id)
+                let hasNotes = store.notes.contains { $0.folder_id == folder.id }
+                if hasNotes {
+                    pendingDeleteFolder = folder
+                } else {
+                    if selectedFolderID == folder.id { setFolder("general") }
+                    store.deleteFolder(id: folder.id)
+                }
             }
         } else {
             Text("Default folder cannot be deleted").foregroundColor(.secondary)

@@ -134,16 +134,23 @@ final class Store: ObservableObject {
         save()
     }
 
-    func deleteFolder(id: String) {
-        // Re-home child folders to the deleted folder's parent (or top level)
-        // so they aren't orphaned.
+    /// Deletes folder `id`. Its child folders are always re-homed to the
+    /// deleted folder's parent (or top level) so they aren't orphaned. The
+    /// folder's own notes are either moved to "general" (`deleteNotes: false`,
+    /// the default) or sent to the trash (`deleteNotes: true`).
+    func deleteFolder(id: String, deleteNotes: Bool = false) {
         let removedParent = folders.first(where: { $0.id == id })?.parent_id
         for i in folders.indices where folders[i].parent_id == id {
             folders[i].parent_id = removedParent
         }
-        // Reassign notes to general before removal.
-        for i in notes.indices where notes[i].folder_id == id {
-            notes[i].folder_id = "general"
+        if deleteNotes {
+            let removed = notes.filter { $0.folder_id == id }
+            trash.insert(contentsOf: removed.map { DeletedNote(note: $0) }, at: 0)
+            notes.removeAll { $0.folder_id == id }
+        } else {
+            for i in notes.indices where notes[i].folder_id == id {
+                notes[i].folder_id = "general"
+            }
         }
         folders.removeAll { $0.id == id }
         save()
