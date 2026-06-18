@@ -2,13 +2,24 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.22</title>
+            <sparkle:version>1.0.22</sparkle:version>
+            <sparkle:shortVersionString>1.0.22</sparkle:shortVersionString>
+            <pubDate>Thu, 18 Jun 2026 03:05:20 GMT</pubDate>
+            <description><![CDATA[## [1.0.22] - 2026-06-18
+
+- Deleting a folder with notes now asks whether to delete the notes (to trash) or move them to General.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.22/MynahPad-1.0.22.dmg" length="6058832" type="application/octet-stream" sparkle:edSignature="ghTtqaAi8niqW4MNkFMDgDMy+95jG+wW6DNEZq4b/ubGAFfAHvnGegFOdbaYfUdLt0xP5GUlmOKbL5whKTnlAw==" sparkle:version="1.0.22" sparkle:shortVersionString="1.0.22" />
+        </item>
+        <item>
             <title>MynahPad 1.0.21</title>
             <sparkle:version>1.0.21</sparkle:version>
             <sparkle:shortVersionString>1.0.21</sparkle:shortVersionString>
             <pubDate>Thu, 18 Jun 2026 01:58:43 GMT</pubDate>
-            <description><![CDATA[## [1.0.21] - 2026-06-18
+            <description>## [1.0.21] - 2026-06-18
 
-- Duplicate a folder and all its notes (plus nested subfolders) with "Duplicate Folder" in the folder right-click menu.]]></description>
+- Duplicate a folder and all its notes (plus nested subfolders) with "Duplicate Folder" in the folder right-click menu.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.21/MynahPad-1.0.21.dmg" length="6041975" type="application/octet-stream" sparkle:edSignature="X73kpqWuBc019fNXarV7C243Lu/rvs7uT1AHpd6txnfudwXF8sXw7rPcM+YJ35G3AyyXlBEHMzjl+wzsOXenAQ==" sparkle:version="1.0.21" sparkle:shortVersionString="1.0.21" />
         </item>
