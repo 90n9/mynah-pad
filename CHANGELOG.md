@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-06-18
+
+- Duplicate a folder and all its notes (plus nested subfolders) with "Duplicate Folder" in the folder right-click menu.
+
 ## [1.0.20] - 2026-06-18
 
 - Nest a folder inside another: drag a folder onto another folder's body, or use the right-click menu ("Move into…" / "Top Level").

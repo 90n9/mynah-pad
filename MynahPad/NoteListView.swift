@@ -563,6 +563,7 @@ struct NoteListView: View {
     private func folderContextMenu(_ folder: Folder, isDefault: Bool) -> some View {
         Button("Rename") { startFolderRename(folder) }
         Button("Reset All Notes") { store.resetNotes(in: folder.id) }
+        Button("Duplicate Folder") { store.duplicateFolder(id: folder.id) }
         if !isDefault {
             let targets = validParents(for: folder)
             if folder.parent_id != nil || !targets.isEmpty {

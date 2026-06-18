@@ -253,6 +253,61 @@ final class Store: ObservableObject {
         if changed { save() }
     }
 
+    /// Duplicates a folder, its notes, and any nested subfolders (with their
+    /// notes) into fresh copies. The top copy is named "<name> copy" and shares
+    /// the original's parent. Image notes get independent PNG files so edits to
+    /// one copy don't affect the other. Returns the new top-level folder.
+    @discardableResult
+    func duplicateFolder(id: String) -> Folder? {
+        guard let original = folders.first(where: { $0.id == id }) else { return nil }
+
+        // Copy the folder subtree, mapping each old folder ID to its new one so
+        // child parent_ids and note folder_ids can be re-pointed.
+        var idMap: [String: String] = [:]
+        var newFolders: [Folder] = []
+
+        let top = Folder(name: "\(original.name) copy", parent_id: original.parent_id)
+        idMap[original.id] = top.id
+        newFolders.append(top)
+
+        var queue = [original.id]
+        while !queue.isEmpty {
+            let parentOld = queue.removeFirst()
+            for child in folders where child.parent_id == parentOld {
+                let copy = Folder(name: child.name, parent_id: idMap[parentOld])
+                idMap[child.id] = copy.id
+                newFolders.append(copy)
+                queue.append(child.id)
+            }
+        }
+
+        // Copy every note belonging to a folder in the subtree.
+        var newNotes: [Note] = []
+        for note in notes where idMap[note.folder_id] != nil {
+            let imagePath = note.image_path.flatMap { copyImageFile(named: $0) }
+            newNotes.append(Note(text: note.text,
+                                 folder_id: idMap[note.folder_id]!,
+                                 used: note.used,
+                                 image_path: imagePath))
+        }
+
+        folders.append(contentsOf: newFolders)
+        notes.append(contentsOf: newNotes)
+        save()
+        return top
+    }
+
+    /// Copies an image file to a fresh uuid-named file in the images dir.
+    /// Returns the new filename, or nil if the source is missing / copy failed.
+    private func copyImageFile(named name: String) -> String? {
+        let src = Self.imagesDirURL.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: src.path) else { return nil }
+        let newName = "\(UUID().uuidString).png"
+        let dst = Self.imagesDirURL.appendingPathComponent(newName)
+        guard (try? FileManager.default.copyItem(at: src, to: dst)) != nil else { return nil }
+        return newName
+    }
+
     func moveNote(id: String, toFolder folderID: String) {
         guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[idx].folder_id = folderID
