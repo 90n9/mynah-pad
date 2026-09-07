@@ -55,23 +55,41 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
 
         let initialRect: NSRect = {
             let geo = store.windowGeometry
+            let w: CGFloat = CGFloat(geo.w > 0 ? geo.w : 320)
+            let h: CGFloat = CGFloat(geo.h > 0 ? geo.h : 500)
+
+            func centred(on screen: NSScreen) -> NSRect {
+                let vf = screen.visibleFrame
+                return NSRect(x: vf.minX + (vf.width - w) / 2,
+                              y: vf.minY + (vf.height - h) / 2,
+                              width: w, height: h)
+            }
+
+            let primary = NSScreen.main ?? NSScreen.screens[0]
             if geo.x == 0 && geo.y == 0 {
                 // Centre on primary screen the first time.
-                let screen = NSScreen.main ?? NSScreen.screens[0]
-                let sw = screen.visibleFrame.width
-                let sh = screen.visibleFrame.height
-                let w: CGFloat = CGFloat(geo.w > 0 ? geo.w : 320)
-                let h: CGFloat = CGFloat(geo.h > 0 ? geo.h : 500)
-                return NSRect(
-                    x: screen.visibleFrame.minX + (sw - w) / 2,
-                    y: screen.visibleFrame.minY + (sh - h) / 2,
-                    width: w,
-                    height: h
-                )
+                return centred(on: primary)
             }
-            return NSRect(x: CGFloat(geo.x), y: CGFloat(geo.y),
-                          width: CGFloat(geo.w > 0 ? geo.w : 320),
-                          height: CGFloat(geo.h > 0 ? geo.h : 500))
+
+            let saved = NSRect(x: CGFloat(geo.x), y: CGFloat(geo.y), width: w, height: h)
+
+            // The saved frame may belong to a display that's since been
+            // unplugged, leaving the window parked off-screen and invisible.
+            // Keep it only if a meaningful part still lands on some screen;
+            // otherwise nudge it back inside, or re-centre as a last resort.
+            let minVisible: CGFloat = 80
+            for screen in NSScreen.screens {
+                let overlap = screen.visibleFrame.intersection(saved)
+                if overlap.width >= minVisible && overlap.height >= minVisible {
+                    return saved
+                }
+            }
+
+            let vf = primary.visibleFrame
+            guard vf.width >= w && vf.height >= h else { return centred(on: primary) }
+            return NSRect(x: min(max(saved.minX, vf.minX), vf.maxX - w),
+                          y: min(max(saved.minY, vf.minY), vf.maxY - h),
+                          width: w, height: h)
         }()
 
         super.init(

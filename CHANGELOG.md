@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.23] - 2026-09-07
+
+- Window is pulled back on-screen when its saved position lands on a disconnected display.
+
 ## [1.0.22] - 2026-06-18
 
 - Deleting a folder with notes now asks whether to delete the notes (to trash) or move them to General.
