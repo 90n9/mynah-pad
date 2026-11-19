@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- MCP server (`mynahpad-mcp`) so agents can list folders, create folders, and add or list notes.
+- Notes reload automatically when `notes.json` changes outside the app.
 - Window size is no longer driven by its SwiftUI content, guarding against a redraw loop that froze the app.
 
 ## [1.0.23] - 2026-09-07

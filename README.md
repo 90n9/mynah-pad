@@ -34,7 +34,21 @@ A `📝` icon appears in the menu bar — you're ready.
 3. Switch to your terminal, then **double-click** the note to paste it.
 4. Used notes turn grey with a ✓. Right-click for Reset / Delete / Move.
 
-Notes are stored at `~/.config/mynahpad/notes.json`.
+Notes are stored at `~/.config/mynahpad/notes.json`. The app reloads the file
+when another program changes it, so there's no need to restart.
+
+## Use with Claude Code (MCP)
+
+MynahPad ships an MCP server so an agent can read and add notes while the app
+is open. Register it once:
+
+```bash
+claude mcp add -s user mynahpad -- /Applications/MynahPad.app/Contents/MacOS/mynahpad-mcp
+```
+
+Tools: `list_folders`, `create_folder`, `add_notes` (several notes at once, in
+order), `list_notes`. The dev build's copy (`dist/MynahPad Dev.app/Contents/MacOS/mynahpad-mcp`)
+uses the dev store at `~/.config/mynahpad-dev/`.
 
 ## Updates
 
