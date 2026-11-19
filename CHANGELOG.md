@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Window size is no longer driven by its SwiftUI content, guarding against a redraw loop that froze the app.
+
 ## [1.0.23] - 2026-09-07
 
 - Window is pulled back on-screen when its saved position lands on a disconnected display.

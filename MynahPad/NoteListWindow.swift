@@ -201,6 +201,13 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
         )
         let hosting = NSHostingView(rootView: rootView)
         hosting.translatesAutoresizingMaskIntoConstraints = false
+        // The window owns its size (minSize/maxSize, saved geometry, the
+        // minimized strip). By default the host also pushes SwiftUI's
+        // min/intrinsic/max size into Auto Layout, which lets the content
+        // resize the window. NoteListView switches layout on its own width
+        // (sidebarBreakpoint), so a layout that nudges the width back across
+        // the breakpoint re-renders forever (100% CPU in AttributeGraph).
+        hosting.sizingOptions = []
         // Ensure the SwiftUI host doesn't paint a solid background that would
         // block the vibrancy layer below it.
         hosting.wantsLayer = true
