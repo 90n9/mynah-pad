@@ -1,28 +1,6 @@
 import Foundation
 import Combine
 
-// MARK: - Window geometry
-
-struct WindowGeometry: Codable {
-    var x: Int
-    var y: Int
-    var w: Int
-    var h: Int
-
-    static let defaultValue = WindowGeometry(x: 0, y: 0, w: 320, h: 500)
-}
-
-// MARK: - Root JSON document
-
-private struct StorageDocument: Codable {
-    var folders: [Folder]
-    var notes: [Note]
-    var window: WindowGeometry
-    /// Deleted-note history (30-day retention). Optional so older `notes.json`
-    /// files without the key still decode; coalesced to `[]` on load.
-    var trash: [DeletedNote]?
-}
-
 // MARK: - Store
 
 /// Observed data store backed by `~/.config/mynahpad/notes.json`.
@@ -44,14 +22,17 @@ final class Store: ObservableObject {
     /// Dev builds use a sibling directory so testing doesn't trample the
     /// user's production notes. Detection is bundle-id based: prod is
     /// `com.mynahpad.app`; dev is `com.mynahpad.app.dev` (see build.sh).
-    private static var baseDirURL: URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.mynahpad.app"
-        let dirName = bundleID.hasSuffix(".dev") ? "mynahpad-dev" : "mynahpad"
-        let base = home.appendingPathComponent(".config/\(dirName)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
-    }
+    private static let isDev = NotesFile.isDevBundle
+
+    private static var baseDirURL: URL { NotesFile.baseDirURL(dev: isDev) }
+
+    /// The file contents (and decoded document) as of our last load, reload
+    /// or save. Lets `save()` spot a write by another process (e.g. the
+    /// `mynahpad-mcp` helper) and lets the watcher ignore our own writes.
+    private var lastSyncedData: Data?
+    private var lastSyncedDoc: StorageDocument?
+    private var dirWatcher: DispatchSourceFileSystemObject?
+    private var fileWatcher: DispatchSourceFileSystemObject?
 
     /// Directory holding image-note files (`<uuid>.png`), created on demand.
     static var imagesDirURL: URL {
@@ -66,54 +47,182 @@ final class Store: ObservableObject {
         return imagesDirURL.appendingPathComponent(name)
     }
 
-    private static var storageURL: URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let url = baseDirURL.appendingPathComponent("notes.json")
-
-        // One-shot migration from the pre-rename location.
-        if !FileManager.default.fileExists(atPath: url.path) {
-            let legacy = home
-                .appendingPathComponent(".config/promptqueue", isDirectory: true)
-                .appendingPathComponent("notes.json")
-            if FileManager.default.fileExists(atPath: legacy.path) {
-                try? FileManager.default.copyItem(at: legacy, to: url)
-            }
-        }
-        return url
-    }
+    private static var storageURL: URL { NotesFile.storageURL(dev: isDev) }
 
     // MARK: Load
 
     func load() {
+        // One-shot migration from the pre-rename location.
+        NotesFile.importLegacyIfNeeded(dev: Self.isDev)
         let url = Self.storageURL
-        guard FileManager.default.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            applyDefaults()
+            return
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            backUpUnreadableFile()
             applyDefaults()
             return
         }
 
         do {
-            var doc = try JSONDecoder().decode(StorageDocument.self, from: data)
-            migrate(&doc)
+            var doc = try StorageDocument.decode(data)
+            doc.migrate()
             folders = doc.folders
             notes = doc.notes
             trash = doc.trash ?? []
             windowGeometry = doc.window
+            lastSyncedData = data
+            lastSyncedDoc = doc
             pruneTrash()
         } catch {
             print("[Store] Decode error: \(error) — seeding defaults")
+            backUpUnreadableFile()
             applyDefaults()
+        }
+    }
+
+    /// Keeps a copy of a `notes.json` we couldn't read before defaults are
+    /// written over it, so a damaged file never costs the user their notes.
+    private func backUpUnreadableFile() {
+        let url = Self.storageURL
+        let backup = url.deletingLastPathComponent()
+            .appendingPathComponent("notes.json.corrupt-\(Int(Date().timeIntervalSince1970))")
+        do {
+            try FileManager.default.copyItem(at: url, to: backup)
+            print("[Store] Unreadable notes.json kept at \(backup.path)")
+        } catch {
+            print("[Store] Could not back up unreadable notes.json: \(error)")
         }
     }
 
     // MARK: Save
 
     func save() {
-        let doc = StorageDocument(folders: folders, notes: notes, window: windowGeometry, trash: trash)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(doc) else { return }
-        try? data.write(to: Self.storageURL, options: .atomicWrite)
+        NotesFile.withLock(dev: Self.isDev) {
+            // Another process wrote since we last synced and our watcher
+            // hasn't picked it up yet: fold its changes in before writing,
+            // or this save would silently drop them.
+            if let disk = NotesFile.readData(dev: Self.isDev), disk != lastSyncedData {
+                if var theirs = try? StorageDocument.decode(disk) {
+                    theirs.migrate()
+                    applyExternal(theirs)
+                } else {
+                    // Someone left the file unparseable (e.g. a hand edit).
+                    // We can't merge it, so keep a copy before writing over it.
+                    backUpUnreadableFile()
+                }
+            }
+            let doc = StorageDocument(folders: folders, notes: notes, window: windowGeometry, trash: trash)
+            guard let data = try? doc.encoded() else { return }
+            do {
+                try NotesFile.write(data, dev: Self.isDev)
+                lastSyncedData = data
+                lastSyncedDoc = doc
+            } catch {
+                print("[Store] Write error: \(error)")
+            }
+        }
+    }
+
+    // MARK: - External changes (live reload)
+
+    /// Watches `notes.json` and reloads when another process changes it.
+    /// Watches the directory too: atomic writes replace the file, which
+    /// leaves a file-only watcher pointing at the old inode.
+    func startWatching() {
+        let dirFD = open(Self.baseDirURL.path, O_EVTONLY)
+        guard dirFD >= 0 else { return }
+        let dir = DispatchSource.makeFileSystemObjectSource(fileDescriptor: dirFD,
+                                                            eventMask: .write, queue: .main)
+        dir.setEventHandler { [weak self] in self?.externalFileEvent() }
+        dir.setCancelHandler { close(dirFD) }
+        dir.resume()
+        dirWatcher = dir
+        watchFile()
+    }
+
+    /// (Re)arms the watcher on the current `notes.json` inode, which catches
+    /// in-place edits that don't touch the directory.
+    private func watchFile() {
+        fileWatcher?.cancel()
+        fileWatcher = nil
+        let fd = open(Self.storageURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)
+        src.setEventHandler { [weak self] in self?.externalFileEvent() }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        fileWatcher = src
+    }
+
+    private func externalFileEvent() {
+        watchFile()
+        reloadIfChangedExternally()
+    }
+
+    /// Loads the file when its contents differ from what we last loaded or
+    /// wrote. Our own saves match `lastSyncedData`, so they're ignored. A
+    /// half-written file fails to decode and is skipped until the next event.
+    func reloadIfChangedExternally() {
+        guard let data = NotesFile.readData(dev: Self.isDev), data != lastSyncedData,
+              var doc = try? StorageDocument.decode(data) else { return }
+        doc.migrate()
+        // Assign only what changed so SwiftUI doesn't redraw for nothing.
+        if folders != doc.folders { folders = doc.folders }
+        if notes != doc.notes { notes = doc.notes }
+        let newTrash = doc.trash ?? []
+        if trash != newTrash { trash = newTrash }
+        // Window geometry stays ours: the app owns the window.
+        lastSyncedData = data
+        lastSyncedDoc = doc
+    }
+
+    /// Merges another process's write into memory: items it added are added,
+    /// items it removed are removed, and items it edited take its version
+    /// unless we edited the same item too (then ours stays).
+    private func applyExternal(_ theirs: StorageDocument) {
+        let base = lastSyncedDoc ?? StorageDocument(folders: [], notes: [], window: .defaultValue, trash: [])
+        var merged = StorageDocument(
+            folders: Self.merge(ours: folders, base: base.folders, theirs: theirs.folders),
+            notes: Self.merge(ours: notes, base: base.notes, theirs: theirs.notes),
+            window: windowGeometry,
+            trash: Self.merge(ours: trash, base: base.trash ?? [], theirs: theirs.trash ?? []))
+        // The lists merge one by one, so re-check what ties them together:
+        // e.g. their new note may sit in a folder we deleted meanwhile.
+        merged.migrate()
+        if folders != merged.folders { folders = merged.folders }
+        if notes != merged.notes { notes = merged.notes }
+        let mergedTrash = merged.trash ?? []
+        if trash != mergedTrash { trash = mergedTrash }
+    }
+
+    /// Three-way merge by id. Added items land right after the item they
+    /// follow in `theirs` (or at the top), so a block added in order stays in
+    /// order.
+    static func merge<T: Identifiable & Equatable>(ours: [T], base: [T], theirs: [T]) -> [T] where T.ID == String {
+        let baseByID = Dictionary(base.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let theirByID = Dictionary(theirs.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let baseIDs = Set(baseByID.keys)
+        let theirIDs = Set(theirByID.keys)
+        var result = ours.filter { !baseIDs.contains($0.id) || theirIDs.contains($0.id) }
+        for i in result.indices {
+            let id = result[i].id
+            if let b = baseByID[id], result[i] == b, let t = theirByID[id], t != b {
+                result[i] = t
+            }
+        }
+        var present = Set(result.map(\.id))
+        var previousID: String?
+        for item in theirs {
+            defer { if present.contains(item.id) { previousID = item.id } }
+            guard !baseIDs.contains(item.id), !present.contains(item.id) else { continue }
+            let at = previousID.flatMap { p in result.firstIndex { $0.id == p }.map { $0 + 1 } } ?? 0
+            result.insert(item, at: at)
+            present.insert(item.id)
+        }
+        return result
     }
 
     // MARK: - CRUD
@@ -418,33 +527,5 @@ final class Store: ObservableObject {
         notes = []
         windowGeometry = .defaultValue
         save()
-    }
-
-    /// Applies forward-compatible migrations so older JSON files continue to work.
-    private func migrate(_ doc: inout StorageDocument) {
-        // 1. Ensure the "general" folder exists.
-        if !doc.folders.contains(where: { $0.id == "general" }) {
-            doc.folders.insert(.general, at: 0)
-        }
-
-        // 2. Reassign orphaned notes (folder_id references a deleted folder) to "general".
-        let knownIDs = Set(doc.folders.map { $0.id })
-        for i in doc.notes.indices where !knownIDs.contains(doc.notes[i].folder_id) {
-            doc.notes[i].folder_id = "general"
-        }
-
-        // 3. Normalise folder nesting: "general" is always a root; any
-        //    parent_id pointing at a missing folder falls back to top level.
-        for i in doc.folders.indices {
-            if doc.folders[i].id == "general" {
-                doc.folders[i].parent_id = nil
-            } else if let p = doc.folders[i].parent_id, !knownIDs.contains(p) {
-                doc.folders[i].parent_id = nil
-            }
-        }
-
-        // 4. `used` defaults to false — already set by Codable default init,
-        //    but guard against any future schema that might omit the field.
-        // (Nothing extra needed: Swift initialises Bool? as nil; struct defaults handle it.)
     }
 }

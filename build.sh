@@ -58,15 +58,27 @@ SDK="$(xcrun --show-sdk-path)"
 SOURCES=(
   "$SRC/Models/Folder.swift"
   "$SRC/Models/Note.swift"
+  "$SRC/Models/NotesFile.swift"
   "$SRC/Models/Store.swift"
   "$SRC/Services/FocusTracker.swift"
   "$SRC/Services/Paster.swift"
+  "$SRC/Services/MCPInstaller.swift"
   "$SRC/AppDelegate.swift"
   "$SRC/StatusBarController.swift"
   "$SRC/NoteListWindow.swift"
   "$SRC/NoteListView.swift"
   "$SRC/UpdateNotifier.swift"
   "$SRC/MynahPadApp.swift"
+)
+
+# MCP helper (stdio server for agents). Shares the model + file layer with the
+# app; must stay free of AppKit/SwiftUI. Ships as Contents/MacOS/mynahpad-mcp.
+MCP_BINARY_NAME="mynahpad-mcp"
+MCP_SOURCES=(
+  "$SRC/Models/Folder.swift"
+  "$SRC/Models/Note.swift"
+  "$SRC/Models/NotesFile.swift"
+  "$PROJECT_DIR/MynahPadMCP/main.swift"
 )
 
 # Build flags
@@ -96,6 +108,16 @@ swiftc \
   "${SOURCES[@]}" \
   -o "$DIST/$BINARY_NAME"
 
+echo "→ Compiling $MCP_BINARY_NAME..."
+swiftc \
+  -sdk "$SDK" \
+  -target arm64-apple-macosx13.0 \
+  -swift-version 5 \
+  $OPT_FLAGS \
+  -framework Foundation \
+  "${MCP_SOURCES[@]}" \
+  -o "$DIST/$MCP_BINARY_NAME"
+
 echo "→ Assembling .app bundle..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
@@ -104,6 +126,8 @@ mkdir -p "$APP/Contents/Frameworks"
 
 cp "$DIST/$BINARY_NAME" "$APP/Contents/MacOS/$BINARY_NAME"
 rm "$DIST/$BINARY_NAME"
+cp "$DIST/$MCP_BINARY_NAME" "$APP/Contents/MacOS/$MCP_BINARY_NAME"
+rm "$DIST/$MCP_BINARY_NAME"
 
 # Embed Sparkle.framework. The framework brings nested XPC services
 # (Downloader.xpc, Installer.xpc, Updater.xpc) — preserve them with -R.
@@ -329,6 +353,10 @@ done
 
 # Framework bundle itself
 codesign --force --sign "$SIGNING_IDENTITY" "$SPARKLE_FW_IN_APP" 2>&1 | sed 's/^/  /'
+
+# MCP helper: a second executable in Contents/MacOS must be signed on its own
+# before the bundle, or the bundle signature fails to verify.
+codesign --force --sign "$SIGNING_IDENTITY" "$APP/Contents/MacOS/$MCP_BINARY_NAME" 2>&1 | sed 's/^/  /'
 
 # Outer app bundle (seals everything above).
 codesign --force --sign "$SIGNING_IDENTITY" "$APP" 2>&1 | sed 's/^/  /'

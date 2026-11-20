@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Shared data store.
         store = Store()
         store.load()
+        store.startWatching()
 
         // Focus tracker must start before user can interact.
         focusTracker = FocusTracker()

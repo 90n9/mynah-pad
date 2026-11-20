@@ -201,6 +201,13 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
         )
         let hosting = NSHostingView(rootView: rootView)
         hosting.translatesAutoresizingMaskIntoConstraints = false
+        // The window owns its size (minSize/maxSize, saved geometry, the
+        // minimized strip). By default the host also pushes SwiftUI's
+        // min/intrinsic/max size into Auto Layout, which lets the content
+        // resize the window. NoteListView switches layout on its own width
+        // (sidebarBreakpoint), so a layout that nudges the width back across
+        // the breakpoint re-renders forever (100% CPU in AttributeGraph).
+        hosting.sizingOptions = []
         // Ensure the SwiftUI host doesn't paint a solid background that would
         // block the vibrancy layer below it.
         hosting.wantsLayer = true
@@ -228,7 +235,7 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
 
     func hideWindow() {
         orderOut(nil)
-        saveGeometry()
+        saveGeometry(now: true)
     }
 
     func toggleWindow() {
@@ -331,18 +338,40 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
 
     // MARK: - Geometry persistence
 
-    private func saveGeometry() {
+    private var pendingGeometrySave: DispatchWorkItem?
+
+    /// Records the frame in the store right away, but writes `notes.json`
+    /// only once the window has stopped moving: a drag or live resize fires
+    /// these callbacks many times a second. Quit still saves the latest
+    /// frame (`applicationWillTerminate`), as does hiding (`now: true`).
+    private func saveGeometry(now: Bool = false) {
         // Skip while minimized — the title-bar-only height isn't a height
         // we want to restore on next launch. The pre-minimize height was
         // already persisted by the previous resize.
         if viewState.isMinimized { return }
         let f = frame
-        store.windowGeometry = WindowGeometry(
+        let geometry = WindowGeometry(
             x: Int(f.origin.x),
             y: Int(f.origin.y),
             w: Int(f.width),
             h: Int(f.height)
         )
-        store.save()
+        let changed = store.windowGeometry != geometry
+        store.windowGeometry = geometry
+        if now {
+            pendingGeometrySave?.cancel()
+            pendingGeometrySave = nil
+            store.save()
+        } else if changed {
+            // An unchanged frame (resize and move both report it) must leave
+            // the pending save alone, or the change is never written.
+            pendingGeometrySave?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.pendingGeometrySave = nil
+                self?.store.save()
+            }
+            pendingGeometrySave = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
     }
 }

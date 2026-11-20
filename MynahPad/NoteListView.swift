@@ -1144,12 +1144,14 @@ struct NoteListView: View {
                 setFolder(folder.id)
             },
             setZone: { zone in
+                // Called on every pointer move during a drag: write state
+                // only when it changes, so the view isn't redrawn each time.
                 switch zone {
                 case .reorderBefore:
-                    folderReorderTargetID = folder.id
+                    if folderReorderTargetID != folder.id { folderReorderTargetID = folder.id }
                     if dropTargetFolderID == folder.id { dropTargetFolderID = nil }
                 case .nest:
-                    dropTargetFolderID = folder.id
+                    if dropTargetFolderID != folder.id { dropTargetFolderID = folder.id }
                     if folderReorderTargetID == folder.id { folderReorderTargetID = nil }
                 case .none:
                     if dropTargetFolderID == folder.id { dropTargetFolderID = nil }
