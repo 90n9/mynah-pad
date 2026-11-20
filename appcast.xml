@@ -2,13 +2,30 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <item>
+            <title>MynahPad 1.0.24</title>
+            <sparkle:version>1.0.24</sparkle:version>
+            <sparkle:shortVersionString>1.0.24</sparkle:shortVersionString>
+            <pubDate>Fri, 20 Nov 2026 10:07:55 GMT</pubDate>
+            <description><![CDATA[## [1.0.24] - 2026-11-20
+
+- MCP server (`mynahpad-mcp`) so agents can list, add, edit, delete and reset notes and create folders.
+- Notes reload automatically when `notes.json` changes outside the app.
+- "Add to Claude Code…" menu item registers the MCP server.
+- An unreadable `notes.json` is kept as `notes.json.corrupt-&lt;timestamp&gt;`.
+- Window position is saved once the window stops moving.
+- Window size is no longer driven by its SwiftUI content.
+- Dragging over folders no longer redraws the list on every pointer move.]]></description>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.24/MynahPad-1.0.24.dmg" length="6127200" type="application/octet-stream" sparkle:edSignature="mPD1w25JTjiSVv+z3KFp2eOlHUUf1jryY9rDNWtAI+rdgo7YFn4q3JcPpHJgN02XCQmtZrkiLNxdKyLLbETlCQ==" sparkle:version="1.0.24" sparkle:shortVersionString="1.0.24" />
+        </item>
+        <item>
             <title>MynahPad 1.0.23</title>
             <sparkle:version>1.0.23</sparkle:version>
             <sparkle:shortVersionString>1.0.23</sparkle:shortVersionString>
             <pubDate>Mon, 07 Sep 2026 01:00:57 GMT</pubDate>
-            <description><![CDATA[## [1.0.23] - 2026-09-07
+            <description>## [1.0.23] - 2026-09-07
 
-- Window is pulled back on-screen when its saved position lands on a disconnected display.]]></description>
+- Window is pulled back on-screen when its saved position lands on a disconnected display.</description>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/90n9/mynah-pad/releases/download/v1.0.23/MynahPad-1.0.23.dmg" length="6070825" type="application/octet-stream" sparkle:edSignature="wU0EZT1z3XtzVnt4YOG6Oi7iHvWBN2csA6PFNna+R5uJKZf7UUucOttdj3PI7IxLpQ8P0Lt51sG03p5L5tDBDA==" sparkle:version="1.0.23" sparkle:shortVersionString="1.0.23" />
         </item>
