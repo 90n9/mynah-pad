@@ -13,16 +13,25 @@ import Foundation
 
 let useDev = CommandLine.arguments.contains("--dev") || NotesFile.isDevBundle
 let serverVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
-let defaultProtocolVersion = "2025-06-18"
+let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
+
+// `--store-path` prints which notes.json this helper uses, then exits.
+if CommandLine.arguments.contains("--store-path") {
+    print(NotesFile.storageURL(dev: useDev).path)
+    exit(0)
+}
 
 struct ToolError: Error { let message: String }
 
 // MARK: - Store access
 
 /// Locked read-modify-write of notes.json. `body` returns the tool result;
-/// the document is written back only when it changed.
+/// the document is written back only when it changed, so read-only tools
+/// never create or touch the file.
 func withDocument(_ body: (inout StorageDocument) throws -> Any) throws -> Any {
     try NotesFile.withLock(dev: useDev) {
+        // The helper may run before the app's first launch.
+        NotesFile.importLegacyIfNeeded(dev: useDev)
         var doc: StorageDocument
         if let data = NotesFile.readData(dev: useDev) {
             do {
@@ -37,7 +46,7 @@ func withDocument(_ body: (inout StorageDocument) throws -> Any) throws -> Any {
         doc.migrate()
         let before = doc
         let result = try body(&doc)
-        if doc != before || NotesFile.readData(dev: useDev) == nil {
+        if doc != before {
             try NotesFile.write(try doc.encoded(), dev: useDev)
         }
         return result
@@ -213,7 +222,8 @@ func callTool(_ name: String, _ args: [String: Any]) throws -> Any {
 
     case "update_note":
         guard let id = args["id"] as? String else { throw ToolError(message: "id is required") }
-        let text = (args["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawText = args["text"] as? String else { throw ToolError(message: "text is required") }
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         return try withDocument { doc in
             guard let idx = doc.notes.firstIndex(where: { $0.id == id }) else {
                 throw ToolError(message: "No note with id \"\(id)\". Call list_notes to see the ids.")
@@ -296,7 +306,10 @@ func handle(_ msg: [String: Any]) {
     case "initialize":
         let requested = params["protocolVersion"] as? String
         reply(id, result: [
-            "protocolVersion": requested ?? defaultProtocolVersion,
+            // Answer with the client's version only when we speak it;
+            // otherwise offer our latest and let the client decide.
+            "protocolVersion": requested.flatMap { supportedProtocolVersions.contains($0) ? $0 : nil }
+                ?? supportedProtocolVersions[0],
             "capabilities": ["tools": [String: Any]()],
             "serverInfo": ["name": "mynahpad", "version": serverVersion],
             "instructions": "MynahPad stores text prompts in folders. Call list_folders for folder ids, then add_notes to add several notes in order. delete_notes moves notes to the trash; reset_folder clears used marks. The running app picks up changes on its own.",

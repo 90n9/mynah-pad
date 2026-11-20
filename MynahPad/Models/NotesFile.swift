@@ -87,6 +87,22 @@ enum NotesFile {
         baseDirURL(dev: dev).appendingPathComponent("notes.json")
     }
 
+    /// One-time import of notes from the pre-rename location
+    /// (`~/.config/promptqueue`). Does nothing once `notes.json` exists. Call
+    /// it only where the store is first opened (app launch, or the helper
+    /// finding no file) — never from a file watcher, where a deleted file
+    /// would bring the old notes back.
+    static func importLegacyIfNeeded(dev: Bool) {
+        let url = storageURL(dev: dev)
+        guard !FileManager.default.fileExists(atPath: url.path) else { return }
+        let legacy = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/promptqueue", isDirectory: true)
+            .appendingPathComponent("notes.json")
+        if FileManager.default.fileExists(atPath: legacy.path) {
+            try? FileManager.default.copyItem(at: legacy, to: url)
+        }
+    }
+
     /// Runs `body` while holding an exclusive `flock` on a sidecar lock file.
     /// Every read-modify-write of `notes.json` (app and helper) goes through
     /// this, so one writer never overwrites a change it hasn't seen.

@@ -40,7 +40,8 @@ when another program changes it, so there's no need to restart.
 ## Use with Claude Code (MCP)
 
 MynahPad ships an MCP server so an agent can read and add notes while the app
-is open. Register it once:
+is open. To register it, click the menu-bar icon → **Add to Claude Code…**,
+then start a new Claude Code session. Or run the command yourself:
 
 ```bash
 claude mcp add -s user mynahpad -- /Applications/MynahPad.app/Contents/MacOS/mynahpad-mcp

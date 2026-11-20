@@ -356,13 +356,16 @@ final class NoteListWindow: NSWindow, NSWindowDelegate {
             w: Int(f.width),
             h: Int(f.height)
         )
-        pendingGeometrySave?.cancel()
-        pendingGeometrySave = nil
         let changed = store.windowGeometry != geometry
         store.windowGeometry = geometry
         if now {
+            pendingGeometrySave?.cancel()
+            pendingGeometrySave = nil
             store.save()
         } else if changed {
+            // An unchanged frame (resize and move both report it) must leave
+            // the pending save alone, or the change is never written.
+            pendingGeometrySave?.cancel()
             let work = DispatchWorkItem { [weak self] in
                 self?.pendingGeometrySave = nil
                 self?.store.save()

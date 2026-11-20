@@ -96,6 +96,10 @@ post ⌘V on a delay. Accessibility permission is mandatory for the keystroke to
 MCP server built into `Contents/MacOS/` and signed on its own before the outer bundle. The
 helper edits the file under `NotesFile.withLock`; it does not talk to the app.
 
+The menu item "Add to Claude Code…" (`Services/MCPInstaller.swift`) runs `claude mcp add -s
+user` for the helper in the running bundle, through a login shell so `claude` is on PATH. The
+dev build registers as `mynahpad-dev`.
+
 `Store.startWatching()` watches the config dir and the file's inode and reloads when the
 contents differ from `lastSyncedData` (what the app last loaded or wrote), so the app's own
 saves never trigger a reload. If `save()` runs before the watcher has delivered an external

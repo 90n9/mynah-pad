@@ -7,6 +7,13 @@ from pathlib import Path
 
 binary, home = sys.argv[1], Path(sys.argv[2])
 store = home / ".config" / "mynahpad" / "notes.json"
+# Safety first: every tool below changes the store, so stop unless the helper
+# really is pointed at the throwaway home.
+actual = subprocess.run([binary, "--store-path"], capture_output=True, text=True).stdout.strip()
+if Path(actual).resolve() != store.resolve():
+    sys.exit(f"ABORT: helper would use {actual!r}, not the throwaway store {str(store)!r}")
+legacy = home / ".config" / "promptqueue" / "notes.json"
+
 proc = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 next_id = 0
 failures = 0
@@ -43,8 +50,10 @@ check("tools/list", names == ["list_folders", "create_folder", "add_notes", "lis
                               "update_note", "delete_notes", "reset_folder"])
 
 folders, _ = call("list_folders")
-check("list_folders seeds general", [f["id"] for f in folders["folders"]] == ["general"])
-check("store is under the throwaway home", store.exists())
+check("list_folders shows general", [f["id"] for f in folders["folders"]] == ["general"])
+check("read-only tool does not create notes.json", not store.exists())
+check("unknown protocol version falls back",
+      rpc("initialize", {"protocolVersion": "2099-01-01"})["result"]["protocolVersion"] == "2025-06-18")
 
 parent, _ = call("create_folder", name="Runbook")
 pid = parent["folder"]["id"]
@@ -70,6 +79,9 @@ updated, _ = call("update_note", id=first, text="zero v2")
 check("update_note", updated["note"]["text"] == "zero v2")
 _, err = call("update_note", id=first, text=" ")
 check("update_note rejects empty text", err)
+_, err = call("update_note", id=first)
+after, _ = call("list_notes", folder_id=pid)
+check("update_note without text changes nothing", err and after["notes"][0]["text"] == "zero v2")
 
 # Mark two notes used straight in the file, as the app would.
 doc = json.loads(store.read_text())
@@ -96,6 +108,16 @@ _, err = call("list_folders")
 check("unreadable notes.json is an error, not overwritten", err and store.read_text() == "{ not json")
 
 check("unknown method", rpc("bogus")["error"]["code"] == -32601)
+
+# With no notes.json, the helper imports the pre-rename store on first use.
+store.unlink()
+legacy.parent.mkdir(parents=True)
+legacy.write_text(json.dumps({"folders": [{"id": "general", "name": "General"}],
+                              "notes": [{"id": "n1", "text": "from promptqueue", "folder_id": "general",
+                                         "used": False, "created_at": 1.0}],
+                              "window": {"x": 0, "y": 0, "w": 320, "h": 500}}))
+imported, _ = call("list_notes")
+check("legacy promptqueue notes are imported", [n["text"] for n in imported["notes"]] == ["from promptqueue"])
 
 proc.stdin.close()
 proc.wait(timeout=5)

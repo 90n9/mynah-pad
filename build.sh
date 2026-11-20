@@ -62,6 +62,7 @@ SOURCES=(
   "$SRC/Models/Store.swift"
   "$SRC/Services/FocusTracker.swift"
   "$SRC/Services/Paster.swift"
+  "$SRC/Services/MCPInstaller.swift"
   "$SRC/AppDelegate.swift"
   "$SRC/StatusBarController.swift"
   "$SRC/NoteListWindow.swift"

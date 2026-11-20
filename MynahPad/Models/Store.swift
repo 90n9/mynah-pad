@@ -47,25 +47,13 @@ final class Store: ObservableObject {
         return imagesDirURL.appendingPathComponent(name)
     }
 
-    private static var storageURL: URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let url = NotesFile.storageURL(dev: isDev)
-
-        // One-shot migration from the pre-rename location.
-        if !FileManager.default.fileExists(atPath: url.path) {
-            let legacy = home
-                .appendingPathComponent(".config/promptqueue", isDirectory: true)
-                .appendingPathComponent("notes.json")
-            if FileManager.default.fileExists(atPath: legacy.path) {
-                try? FileManager.default.copyItem(at: legacy, to: url)
-            }
-        }
-        return url
-    }
+    private static var storageURL: URL { NotesFile.storageURL(dev: isDev) }
 
     // MARK: Load
 
     func load() {
+        // One-shot migration from the pre-rename location.
+        NotesFile.importLegacyIfNeeded(dev: Self.isDev)
         let url = Self.storageURL
         guard FileManager.default.fileExists(atPath: url.path) else {
             applyDefaults()
@@ -115,10 +103,15 @@ final class Store: ObservableObject {
             // Another process wrote since we last synced and our watcher
             // hasn't picked it up yet: fold its changes in before writing,
             // or this save would silently drop them.
-            if let disk = NotesFile.readData(dev: Self.isDev), disk != lastSyncedData,
-               var theirs = try? StorageDocument.decode(disk) {
-                theirs.migrate()
-                applyExternal(theirs)
+            if let disk = NotesFile.readData(dev: Self.isDev), disk != lastSyncedData {
+                if var theirs = try? StorageDocument.decode(disk) {
+                    theirs.migrate()
+                    applyExternal(theirs)
+                } else {
+                    // Someone left the file unparseable (e.g. a hand edit).
+                    // We can't merge it, so keep a copy before writing over it.
+                    backUpUnreadableFile()
+                }
             }
             let doc = StorageDocument(folders: folders, notes: notes, window: windowGeometry, trash: trash)
             guard let data = try? doc.encoded() else { return }
@@ -191,9 +184,18 @@ final class Store: ObservableObject {
     /// unless we edited the same item too (then ours stays).
     private func applyExternal(_ theirs: StorageDocument) {
         let base = lastSyncedDoc ?? StorageDocument(folders: [], notes: [], window: .defaultValue, trash: [])
-        folders = Self.merge(ours: folders, base: base.folders, theirs: theirs.folders)
-        notes = Self.merge(ours: notes, base: base.notes, theirs: theirs.notes)
-        trash = Self.merge(ours: trash, base: base.trash ?? [], theirs: theirs.trash ?? [])
+        var merged = StorageDocument(
+            folders: Self.merge(ours: folders, base: base.folders, theirs: theirs.folders),
+            notes: Self.merge(ours: notes, base: base.notes, theirs: theirs.notes),
+            window: windowGeometry,
+            trash: Self.merge(ours: trash, base: base.trash ?? [], theirs: theirs.trash ?? []))
+        // The lists merge one by one, so re-check what ties them together:
+        // e.g. their new note may sit in a folder we deleted meanwhile.
+        merged.migrate()
+        if folders != merged.folders { folders = merged.folders }
+        if notes != merged.notes { notes = merged.notes }
+        let mergedTrash = merged.trash ?? []
+        if trash != mergedTrash { trash = mergedTrash }
     }
 
     /// Three-way merge by id. Added items land right after the item they

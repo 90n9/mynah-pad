@@ -108,6 +108,15 @@ final class StatusBarController: NSObject {
         deletedNotes.target = self
         menu.addItem(deletedNotes)
 
+        // Registers the bundled MCP server with Claude Code (`claude mcp add`).
+        let addToClaude = NSMenuItem(
+            title: "Add to Claude Code…",
+            action: #selector(addToClaudeCode),
+            keyEquivalent: ""
+        )
+        addToClaude.target = self
+        menu.addItem(addToClaude)
+
         menu.addItem(.separator())
 
         let about = NSMenuItem(
@@ -147,6 +156,10 @@ final class StatusBarController: NSObject {
 
     @objc private func showDeletedNotes() {
         window?.showTrashHistory()
+    }
+
+    @objc private func addToClaudeCode() {
+        MCPInstaller.installAndReport()
     }
 
     @objc private func showAbout() {
