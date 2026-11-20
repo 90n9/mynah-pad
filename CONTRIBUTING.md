@@ -21,6 +21,9 @@ cd mynah-pad
 ./build.sh --release --dmg   # Also wrap in a DMG
 ```
 
+`scripts/test.sh` runs the checks that don't need the app: the `notes.json`
+merge logic and the `mynahpad-mcp` server (against a throwaway home directory).
+
 The first build downloads Sparkle (~13 MB) to `vendor/Sparkle/` (gitignored).
 It also generates a self-signed code-signing certificate named **MynahPad Dev**
 in your login keychain — required so the TCC Accessibility grant survives

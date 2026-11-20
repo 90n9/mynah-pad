@@ -67,8 +67,12 @@ final class Store: ObservableObject {
 
     func load() {
         let url = Self.storageURL
-        guard FileManager.default.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            applyDefaults()
+            return
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            backUpUnreadableFile()
             applyDefaults()
             return
         }
@@ -85,7 +89,22 @@ final class Store: ObservableObject {
             pruneTrash()
         } catch {
             print("[Store] Decode error: \(error) — seeding defaults")
+            backUpUnreadableFile()
             applyDefaults()
+        }
+    }
+
+    /// Keeps a copy of a `notes.json` we couldn't read before defaults are
+    /// written over it, so a damaged file never costs the user their notes.
+    private func backUpUnreadableFile() {
+        let url = Self.storageURL
+        let backup = url.deletingLastPathComponent()
+            .appendingPathComponent("notes.json.corrupt-\(Int(Date().timeIntervalSince1970))")
+        do {
+            try FileManager.default.copyItem(at: url, to: backup)
+            print("[Store] Unreadable notes.json kept at \(backup.path)")
+        } catch {
+            print("[Store] Could not back up unreadable notes.json: \(error)")
         }
     }
 
@@ -168,7 +187,8 @@ final class Store: ObservableObject {
     }
 
     /// Merges another process's write into memory: items it added are added,
-    /// items it removed are removed, and items both sides hold keep our copy.
+    /// items it removed are removed, and items it edited take its version
+    /// unless we edited the same item too (then ours stays).
     private func applyExternal(_ theirs: StorageDocument) {
         let base = lastSyncedDoc ?? StorageDocument(folders: [], notes: [], window: .defaultValue, trash: [])
         folders = Self.merge(ours: folders, base: base.folders, theirs: theirs.folders)
@@ -179,10 +199,18 @@ final class Store: ObservableObject {
     /// Three-way merge by id. Added items land right after the item they
     /// follow in `theirs` (or at the top), so a block added in order stays in
     /// order.
-    static func merge<T: Identifiable>(ours: [T], base: [T], theirs: [T]) -> [T] where T.ID == String {
-        let baseIDs = Set(base.map(\.id))
-        let theirIDs = Set(theirs.map(\.id))
+    static func merge<T: Identifiable & Equatable>(ours: [T], base: [T], theirs: [T]) -> [T] where T.ID == String {
+        let baseByID = Dictionary(base.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let theirByID = Dictionary(theirs.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let baseIDs = Set(baseByID.keys)
+        let theirIDs = Set(theirByID.keys)
         var result = ours.filter { !baseIDs.contains($0.id) || theirIDs.contains($0.id) }
+        for i in result.indices {
+            let id = result[i].id
+            if let b = baseByID[id], result[i] == b, let t = theirByID[id], t != b {
+                result[i] = t
+            }
+        }
         var present = Set(result.map(\.id))
         var previousID: String?
         for item in theirs {

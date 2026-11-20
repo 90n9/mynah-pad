@@ -47,7 +47,8 @@ claude mcp add -s user mynahpad -- /Applications/MynahPad.app/Contents/MacOS/myn
 ```
 
 Tools: `list_folders`, `create_folder`, `add_notes` (several notes at once, in
-order), `list_notes`. The dev build's copy (`dist/MynahPad Dev.app/Contents/MacOS/mynahpad-mcp`)
+order), `list_notes`, `update_note`, `delete_notes` (to the trash),
+`reset_folder` (clear used marks). The dev build's copy (`dist/MynahPad Dev.app/Contents/MacOS/mynahpad-mcp`)
 uses the dev store at `~/.config/mynahpad-dev/`.
 
 ## Updates

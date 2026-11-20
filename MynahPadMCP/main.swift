@@ -119,6 +119,42 @@ let tools: [[String: Any]] = [
         ],
         "annotations": ["readOnlyHint": true],
     ],
+    [
+        "name": "update_note",
+        "description": "Replace the text of one note (for an image note, its caption). Returns the updated note.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string", "description": "Note id (see list_notes)"],
+                "text": ["type": "string", "description": "New text"],
+            ],
+            "required": ["id", "text"],
+        ],
+    ],
+    [
+        "name": "delete_notes",
+        "description": "Move notes to MynahPad's trash, where the user can restore them for 30 days. Fails without deleting anything if an id is unknown.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "ids": ["type": "array", "items": ["type": "string"], "minItems": 1,
+                        "description": "Ids of the notes to delete"],
+            ],
+            "required": ["ids"],
+        ],
+        "annotations": ["destructiveHint": true],
+    ],
+    [
+        "name": "reset_folder",
+        "description": "Clear the used mark on every note in a folder, so a set of prompts can be run again. Returns how many notes were reset.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "folder_id": ["type": "string", "description": "Folder id (see list_folders)"],
+            ],
+            "required": ["folder_id"],
+        ],
+    ],
 ]
 
 func callTool(_ name: String, _ args: [String: Any]) throws -> Any {
@@ -175,6 +211,53 @@ func callTool(_ name: String, _ args: [String: Any]) throws -> Any {
             return ["notes": notes.map(noteJSON)]
         }
 
+    case "update_note":
+        guard let id = args["id"] as? String else { throw ToolError(message: "id is required") }
+        let text = (args["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return try withDocument { doc in
+            guard let idx = doc.notes.firstIndex(where: { $0.id == id }) else {
+                throw ToolError(message: "No note with id \"\(id)\". Call list_notes to see the ids.")
+            }
+            // A text note can't be empty; an image note's caption can.
+            guard !text.isEmpty || doc.notes[idx].isImage else {
+                throw ToolError(message: "text must not be empty")
+            }
+            doc.notes[idx].text = text
+            return ["note": noteJSON(doc.notes[idx])]
+        }
+
+    case "delete_notes":
+        guard let ids = args["ids"] as? [String], !ids.isEmpty else {
+            throw ToolError(message: "ids must be a non-empty array of strings")
+        }
+        return try withDocument { doc in
+            let wanted = Set(ids)
+            let unknown = wanted.subtracting(doc.notes.map(\.id)).sorted()
+            guard unknown.isEmpty else {
+                throw ToolError(message: "No note with id: \(unknown.joined(separator: ", ")). Nothing was deleted.")
+            }
+            let removed = doc.notes.filter { wanted.contains($0.id) }
+            var trash = doc.trash ?? []
+            trash.insert(contentsOf: removed.map { DeletedNote(note: $0) }, at: 0)
+            doc.trash = trash
+            doc.notes.removeAll { wanted.contains($0.id) }
+            return ["deleted": removed.map(\.id), "restorable_from_trash": true]
+        }
+
+    case "reset_folder":
+        guard let folderID = args["folder_id"] as? String else {
+            throw ToolError(message: "folder_id is required")
+        }
+        return try withDocument { doc in
+            try requireFolder(folderID, in: doc)
+            var count = 0
+            for i in doc.notes.indices where doc.notes[i].folder_id == folderID && doc.notes[i].used {
+                doc.notes[i].used = false
+                count += 1
+            }
+            return ["reset": count]
+        }
+
     default:
         throw ToolError(message: "Unknown tool \"\(name)\"")
     }
@@ -216,7 +299,7 @@ func handle(_ msg: [String: Any]) {
             "protocolVersion": requested ?? defaultProtocolVersion,
             "capabilities": ["tools": [String: Any]()],
             "serverInfo": ["name": "mynahpad", "version": serverVersion],
-            "instructions": "MynahPad stores text prompts in folders. Call list_folders for folder ids, then add_notes to add several notes in order. The running app picks up changes on its own.",
+            "instructions": "MynahPad stores text prompts in folders. Call list_folders for folder ids, then add_notes to add several notes in order. delete_notes moves notes to the trash; reset_folder clears used marks. The running app picks up changes on its own.",
         ])
     case "ping":
         reply(id, result: [String: Any]())
